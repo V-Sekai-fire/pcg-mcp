@@ -223,20 +223,35 @@ defmodule MiniZincMcp.Solver do
         {:ok, {output, 0}} ->
           parse_json_output(output)
 
-        {:ok, {output, status}} ->
-          # Log full output for debugging
-          Logger.debug("MiniZinc returned status #{status}, output: #{inspect(output)}")
-          # Try to parse even if status is non-zero (MiniZinc may return solutions with warnings)
+        {:ok, {output, exit_status}} ->
+          # Log full output for debugging (both stdout and stderr are captured via stderr_to_stdout)
+          Logger.debug("MiniZinc returned exit status #{exit_status}, output length: #{String.length(output)}")
+          Logger.debug("MiniZinc output: #{inspect(String.slice(output, 0, 1000))}")
+          
+          # Always try to parse JSON output first, regardless of exit status
+          # MiniZinc may return valid JSON with status "UNSATISFIABLE" even with non-zero exit code
           case parse_json_output(output) do
-            {:ok, solution} -> {:ok, solution}
-            _ -> 
-              # Include full output in error message (up to 2000 chars to avoid huge messages)
+            {:ok, solution} -> 
+              # Successfully parsed - return the solution even if exit status was non-zero
+              {:ok, solution}
+            {:error, parse_error} ->
+              # JSON parsing failed - include full output in error message
               output_preview = if String.length(output) > 2000 do
                 String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
               else
                 output
               end
-              {:error, "MiniZinc failed with status #{status}:\n#{output_preview}"}
+              Logger.error("Failed to parse MiniZinc output. Exit status: #{exit_status}, Parse error: #{inspect(parse_error)}")
+              {:error, "MiniZinc failed with exit status #{exit_status}. Output:\n#{output_preview}"}
+            other ->
+              # Unexpected return from parse_json_output
+              Logger.error("Unexpected return from parse_json_output: #{inspect(other)}")
+              output_preview = if String.length(output) > 2000 do
+                String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
+              else
+                output
+              end
+              {:error, "MiniZinc failed with exit status #{exit_status}. Unexpected parse result: #{inspect(other)}. Output:\n#{output_preview}"}
           end
 
         nil ->
@@ -253,7 +268,8 @@ defmodule MiniZincMcp.Solver do
   defp build_command_args(model_path, data_path, solver, solver_options) do
     args = [
       "--solver", solver,
-      "--json-stream"
+      "--json-stream",
+      "--canonicalize"
     ]
 
     # Add solver-specific options
@@ -388,19 +404,22 @@ defmodule MiniZincMcp.Solver do
         {:error, error_msg}
       status in ["UNSATISFIABLE", "UNSAT"] -> 
         # UNSATISFIABLE is a valid result - the problem has no solution
+        # Use string keys for JSON compatibility
         Logger.info("Problem is unsatisfiable (status: #{inspect(status)})")
-        {:ok, %{status: status, message: "Problem is unsatisfiable - no solution exists"}}
+        {:ok, %{"status" => status, "message" => "Problem is unsatisfiable - no solution exists"}}
       status == "OPTIMAL_SOLUTION" or status == "SATISFIED" -> 
         if map_size(solution) > 0 do
           {:ok, solution}
         else
-          {:ok, %{status: status}}
+          # Use string keys for JSON compatibility
+          {:ok, %{"status" => status}}
         end
       map_size(solution) > 0 -> {:ok, solution}
       status != nil -> 
         # We have a status but no solution - return it as success with status
+        # Use string keys for JSON compatibility
         Logger.info("No solution found. Status: #{inspect(status)}, Solution map: #{inspect(solution)}")
-        {:ok, %{status: status, solution: solution}}
+        {:ok, %{"status" => status, "solution" => solution}}
       true -> 
         # If we have no solution and no clear status, log warning
         Logger.warning("No solution found and no clear status. Solution map: #{inspect(solution)}, Status: #{inspect(status)}")

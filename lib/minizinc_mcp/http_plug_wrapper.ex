@@ -33,23 +33,46 @@ defmodule MiniZincMcp.HttpPlugWrapper do
           handle_missing_session_id(conn, opts)
       end
 
-    # If the response has a 500 status but empty body, send a proper error response
+    # MCP/JSON-RPC 2.0 spec requires all responses to be valid JSON-RPC messages
+    # If the response has a 500 status but empty body, send a proper JSON-RPC error response
     case result do
-      %Plug.Conn{status: status, resp_body: body} when status == 500 and (body == "" or body == nil) ->
-        # Extract request ID from the request body if available
-        request_id = extract_request_id(conn)
-        error_response = %{
-          "jsonrpc" => "2.0",
-          "error" => %{
-            "code" => -32603,
-            "message" => "Internal error",
-            "data" => %{"reason" => "No response from handler"}
-          },
-          "id" => request_id
-        }
-        result
-        |> Plug.Conn.put_resp_content_type("application/json")
-        |> Plug.Conn.send_resp(500, Jason.encode!(error_response))
+      %Plug.Conn{status: status} = conn_result when status == 500 ->
+        require Logger
+        # Check if body is empty - resp_body might not be set yet, check state
+        body = case conn_result.resp_body do
+          nil -> ""
+          "" -> ""
+          body when is_binary(body) -> 
+            if String.length(body) == 0, do: "", else: body
+          _ -> ""
+        end
+        
+        # Also check content-length header
+        content_length = Plug.Conn.get_resp_header(conn_result, "content-length")
+        is_empty = body == "" or (content_length != [] and List.first(content_length) == "0")
+        
+        Logger.debug("HttpPlugWrapper: 500 response, body length: #{String.length(body || "")}, content-length: #{inspect(content_length)}, is_empty: #{is_empty}")
+        
+        if is_empty do
+          # Extract request ID from the request body if available
+          request_id = extract_request_id(conn)
+          # JSON-RPC 2.0 spec: -32603 = Internal error
+          error_response = %{
+            "jsonrpc" => "2.0",
+            "error" => %{
+              "code" => -32603,
+              "message" => "Internal error",
+              "data" => %{"reason" => "No response from handler - empty body"}
+            },
+            "id" => request_id
+          }
+          Logger.info("HttpPlugWrapper: Replacing empty 500 response with JSON-RPC error: #{inspect(error_response)}")
+          conn_result
+          |> Plug.Conn.put_resp_content_type("application/json")
+          |> Plug.Conn.send_resp(500, Jason.encode!(error_response))
+        else
+          conn_result
+        end
 
       %Plug.Conn{} = conn_result ->
         conn_result

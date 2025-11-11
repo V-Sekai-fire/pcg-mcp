@@ -136,118 +136,75 @@ defmodule MiniZincMcp.NativeService do
   # Tool call handlers
   @impl true
   def handle_tool_call(tool_name, args, state) do
-    # Use Process.flag to catch any exit signals
-    Process.flag(:trap_exit, true)
-    
-    result = 
-      try do
-        case tool_name do
-          "minizinc_solve" ->
-            handle_solve(args, state)
+    case tool_name do
+      "minizinc_solve" ->
+        handle_solve(args, state)
 
-          _ ->
-            {:error, "Tool not found: #{tool_name}", state}
-        end
-      rescue
-        e ->
-          error_msg = "Error in handle_tool_call: #{Exception.message(e)}"
-          Logger.error("#{error_msg}\n#{Exception.format(:error, e, __STACKTRACE__)}")
-          {:error, error_msg, state}
-      catch
-        :exit, reason ->
-          error_msg = "Process exited: #{inspect(reason)}"
-          Logger.error(error_msg)
-          {:error, error_msg, state}
-        kind, reason ->
-          error_msg = "Caught #{kind}: #{inspect(reason)}"
-          Logger.error(error_msg)
-          {:error, error_msg, state}
-      end
-    
-    # Always return a valid tuple, even if result is unexpected
-    case result do
-      {:ok, response, new_state} -> {:ok, response, new_state}
-      {:error, reason, new_state} -> {:error, reason, new_state}
-      {:ok, response} -> {:ok, response, state}
-      {:error, reason} -> {:error, reason, state}
-      other ->
-        Logger.error("Unexpected return from handle_tool_call: #{inspect(other)}")
-        {:error, "Internal error: unexpected return format", state}
+      _ ->
+        {:error, "Tool not found: #{tool_name}", state}
     end
-  after
-    Process.flag(:trap_exit, false)
   end
 
   defp handle_solve(args, state) do
-    # Wrap everything in a function that always returns a tuple
-    fn ->
-      try do
-        # Ensure args is a map
-        args = if is_map(args), do: args, else: %{}
-        
-        model_path = Map.get(args, "model_path")
-        model_content = Map.get(args, "model_content")
-        data_path = Map.get(args, "data_path")
-        data_content = Map.get(args, "data_content")
-        # Only allow chuffed solver (ignore user input)
-        solver = "chuffed"
-        timeout = Map.get(args, "timeout", 60_000)
-        auto_include_stdlib = Map.get(args, "auto_include_stdlib", true)
+    # Ensure args is a map
+    args = if is_map(args), do: args, else: %{}
+    
+    model_path = Map.get(args, "model_path")
+    model_content = Map.get(args, "model_content")
+    data_path = Map.get(args, "data_path")
+    data_content = Map.get(args, "data_content")
+    # Only allow chuffed solver (ignore user input)
+    solver = "chuffed"
+    timeout = Map.get(args, "timeout", 60_000)
+    auto_include_stdlib = Map.get(args, "auto_include_stdlib", true)
 
-        opts = [solver: solver, timeout: timeout, auto_include_stdlib: auto_include_stdlib]
+    opts = [solver: solver, timeout: timeout, auto_include_stdlib: auto_include_stdlib]
 
-        result =
-          cond do
-            model_content && model_content != "" ->
-              # Solve from string content
-              Solver.solve_string(model_content, data_content, opts)
+    result =
+      cond do
+        model_content && model_content != "" ->
+          # Solve from string content
+          Solver.solve_string(model_content, data_content, opts)
 
-            model_path && model_path != "" ->
-              # Solve from file
-              Solver.solve(model_path, data_path, opts)
+        model_path && model_path != "" ->
+          # Solve from file
+          Solver.solve(model_path, data_path, opts)
 
-            true ->
-              {:error, "Either model_path or model_content must be provided"}
-          end
-
-        case result do
-          {:ok, solution} ->
-            try do
-              # Ensure all keys are strings for JSON encoding
-              solution_map = if is_map(solution), do: solution, else: %{result: solution}
-              solution_json = Jason.encode!(solution_map)
-              # Use ExMCP.Protocol.Content.text/1 if available, otherwise create map directly
-              content_item = if function_exported?(ExMCP.Protocol.Content, :text, 1) do
-                ExMCP.Protocol.Content.text(solution_json)
-              else
-                %{type: "text", text: solution_json}
-              end
-              {:ok, %{content: [content_item]}, state}
-            rescue
-              e ->
-                error_msg = "Failed to encode solution: #{Exception.message(e)}"
-                Logger.error("#{error_msg}\n#{Exception.format(:error, e, __STACKTRACE__)}")
-                {:error, error_msg, state}
-            end
-
-          {:error, reason} ->
-            # Preserve full error message from solver for better debugging
-            error_msg = if is_binary(reason), do: reason, else: to_string(reason)
-            Logger.error("MiniZinc solve failed: #{error_msg}")
-            {:error, error_msg, state}
-        end
-      rescue
-        e ->
-          error_msg = "Unexpected error in handle_solve: #{Exception.message(e)}"
-          Logger.error("#{error_msg}\n#{Exception.format(:error, e, __STACKTRACE__)}")
-          {:error, error_msg, state}
-      catch
-        kind, reason ->
-          error_msg = "Caught #{kind} in handle_solve: #{inspect(reason)}"
-          Logger.error(error_msg)
-          {:error, error_msg, state}
+        true ->
+          {:error, "Either model_path or model_content must be provided"}
       end
-    end.()
+
+    case result do
+      {:ok, solution} ->
+        # Ensure all keys are strings for JSON encoding
+        # Recursively convert atom keys to strings
+        solution_map = normalize_for_json(solution)
+        solution_json = Jason.encode!(solution_map)
+        
+        # Create content item with string keys for JSON compatibility
+        content_item = %{"type" => "text", "text" => solution_json}
+        response = %{"content" => [content_item]}
+        {:ok, response, state}
+
+      {:error, reason} ->
+        # Preserve full error message from solver
+        error_msg = if is_binary(reason), do: reason, else: to_string(reason)
+        {:error, error_msg, state}
+    end
   end
+
+  # Recursively convert atom keys to strings for JSON encoding
+  defp normalize_for_json(value) when is_map(value) do
+    Enum.reduce(value, %{}, fn
+      {k, v}, acc when is_atom(k) -> 
+        Map.put(acc, Atom.to_string(k), normalize_for_json(v))
+      {k, v}, acc -> 
+        Map.put(acc, k, normalize_for_json(v))
+    end)
+  end
+  defp normalize_for_json(value) when is_list(value) do
+    Enum.map(value, &normalize_for_json/1)
+  end
+  defp normalize_for_json(value), do: value
 
 end
