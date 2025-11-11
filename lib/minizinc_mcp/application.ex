@@ -19,8 +19,8 @@ defmodule MiniZincMcp.Application do
           host = get_host()
 
           # For HTTP transport, don't start NativeService as supervisor child
-          # MessageProcessor will start temporary instances per request without names
-          # This avoids name conflicts entirely
+          # MessageProcessor will start temporary instances per request
+          # Our override ensures they start without names to avoid conflicts
           [
             {MiniZincMcp.HttpServer, [port: port, host: host]}
           ]

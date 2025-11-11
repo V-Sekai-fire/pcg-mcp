@@ -22,14 +22,23 @@ defmodule MiniZincMcp.NativeService do
   alias MiniZincMcp.Solver
 
   # Override do_start_link to avoid name registration for temporary instances
-  # This must be defined after 'use ExMCP.Server' to override the generated function
+  # The generated start_link calls this, so we override it to prevent conflicts
+  # When no name is provided, start without name registration
   defp do_start_link(:native, opts) do
     name = Keyword.get(opts, :name)
     
     # If no name provided, start without name registration to avoid conflicts
+    # This allows ExMCP.MessageProcessor to start multiple temporary instances
     genserver_opts = if name, do: [name: name], else: []
     
-    GenServer.start_link(__MODULE__, opts, genserver_opts)
+    case GenServer.start_link(__MODULE__, opts, genserver_opts) do
+      {:error, {:already_started, pid}} ->
+        # Process already started, return the existing PID
+        {:ok, pid}
+      
+      result ->
+        result
+    end
   end
 
   # Define MiniZinc tools using ex_mcp DSL
