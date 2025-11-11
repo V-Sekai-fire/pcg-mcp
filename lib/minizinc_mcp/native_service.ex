@@ -21,6 +21,17 @@ defmodule MiniZincMcp.NativeService do
 
   alias MiniZincMcp.Solver
 
+  # Override do_start_link to avoid name registration for temporary instances
+  # This must be defined after 'use ExMCP.Server' to override the generated function
+  defp do_start_link(:native, opts) do
+    name = Keyword.get(opts, :name)
+    
+    # If no name provided, start without name registration to avoid conflicts
+    genserver_opts = if name, do: [name: name], else: []
+    
+    GenServer.start_link(__MODULE__, opts, genserver_opts)
+  end
+
   # Define MiniZinc tools using ex_mcp DSL
 
   deftool "minizinc_solve" do
