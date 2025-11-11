@@ -246,8 +246,10 @@ defmodule MiniZincMcp.Solver do
                 {Map.merge(sol_acc, %{solutions: json_solution}), stat_acc, err_acc}
 
               %{"type" => "solution", "output" => output_text} ->
-                # Only support DZN format output
+                # Only parse DZN format, but passthrough all output text
                 dzn_text = extract_dzn_output(output_text)
+                output_text_str = extract_output_text_for_passthrough(output_text)
+                
                 if dzn_text != "" do
                   parsed = parse_dzn_output(dzn_text)
                   # Build solution map with parsed variables and DZN output
@@ -256,11 +258,16 @@ defmodule MiniZincMcp.Solver do
                     |> Map.merge(parsed)
                     |> Map.put(:output, output_text)
                     |> Map.put(:dzn_output, dzn_text)
+                    |> maybe_put_output_text(output_text_str)
                   {merged, stat_acc, err_acc}
                 else
-                  # No DZN output available - log warning and skip
+                  # No DZN output available - passthrough output text without parsing
                   Logger.warning("Solution has no DZN output format, only: #{inspect(Map.keys(output_text))}")
-                  {sol_acc, stat_acc, err_acc}
+                  merged =
+                    sol_acc
+                    |> Map.put(:output, output_text)
+                    |> maybe_put_output_text(output_text_str)
+                  {merged, stat_acc, err_acc}
                 end
 
               %{"type" => "status", "status" => stat} ->
@@ -297,6 +304,27 @@ defmodule MiniZincMcp.Solver do
 
   defp extract_dzn_output(%{"dzn" => text}) when is_binary(text), do: text
   defp extract_dzn_output(_), do: ""
+
+  defp extract_output_text_for_passthrough(output) when is_binary(output), do: output
+  defp extract_output_text_for_passthrough(%{"default" => text}) when is_binary(text), do: text
+  defp extract_output_text_for_passthrough(%{"raw" => text}) when is_binary(text), do: text
+  defp extract_output_text_for_passthrough(output) when is_map(output) do
+    # Try to get any string value from the map (prefer default, then raw)
+    cond do
+      Map.has_key?(output, "default") -> output["default"]
+      Map.has_key?(output, "raw") -> output["raw"]
+      true ->
+        case Enum.find(output, fn {_, v} -> is_binary(v) end) do
+          {_, text} when is_binary(text) -> text
+          _ -> nil
+        end
+    end
+  end
+  defp extract_output_text_for_passthrough(_), do: nil
+
+  defp maybe_put_output_text(map, nil), do: map
+  defp maybe_put_output_text(map, text) when is_binary(text) and text != "", do: Map.put(map, :output_text, text)
+  defp maybe_put_output_text(map, _), do: map
 
   defp parse_dzn_output(output) when is_binary(output) and output != "" do
     # Parse complete DZN format
