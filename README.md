@@ -69,6 +69,12 @@ The server provides the following MCP tools:
 
 - `minizinc_solve` - Solve a MiniZinc model (chuffed solver only)
 
+### Standard Library Support
+
+The `minizinc_solve` tool automatically includes common MiniZinc standard libraries (e.g., `alldifferent.mzn`) 
+if they are not already present in the model. This means you can use standard functions like `all_different` 
+without needing to add explicit `include` statements.
+
 ### Output Format
 
 The `minizinc_solve` tool returns solutions in the following format:

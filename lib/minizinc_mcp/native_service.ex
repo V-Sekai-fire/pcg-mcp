@@ -53,6 +53,10 @@ defmodule MiniZincMcp.NativeService do
       description("""
       Solves a MiniZinc model file or string content using chuffed solver (fixed, not configurable).
       
+      Standard libraries: By default, automatically includes common MiniZinc standard libraries (e.g., alldifferent.mzn) 
+      if not already present in the model. This can be controlled via the auto_include_stdlib parameter (default: true).
+      This allows models to use standard functions without explicit includes.
+      
       Output format:
       - DZN format: Variables are parsed from DZN format when available (models without explicit output statements)
       - Output text: Explicit output statements are passthrough'd in output_text field
@@ -83,6 +87,11 @@ defmodule MiniZincMcp.NativeService do
           type: "integer",
           description: "Timeout in milliseconds (default: 60000)",
           default: 60_000
+        },
+        auto_include_stdlib: %{
+          type: "boolean",
+          description: "Automatically include standard MiniZinc libraries (e.g., alldifferent.mzn) if not present (default: true)",
+          default: true
         }
       }
     })
@@ -133,8 +142,9 @@ defmodule MiniZincMcp.NativeService do
     # Only allow chuffed solver (ignore user input)
     solver = "chuffed"
     timeout = Map.get(args, "timeout", 60_000)
+    auto_include_stdlib = Map.get(args, "auto_include_stdlib", true)
 
-    opts = [solver: solver, timeout: timeout]
+    opts = [solver: solver, timeout: timeout, auto_include_stdlib: auto_include_stdlib]
 
     result =
       cond do

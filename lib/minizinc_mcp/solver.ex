@@ -8,6 +8,12 @@ defmodule MiniZincMcp.Solver do
   This solver uses the standard MiniZinc command-line interface and parses JSON output.
   No NIFs are required - everything is done via external process communication.
 
+  ## Standard Library Preamble
+
+  The solver automatically adds standard MiniZinc library includes (e.g., `alldifferent.mzn`) 
+  to models if they are not already present. This allows models to use standard functions like 
+  `all_different` without requiring explicit `include` statements.
+
   ## Output Format
 
   The solver handles two output formats from MiniZinc:
@@ -81,12 +87,16 @@ defmodule MiniZincMcp.Solver do
     # Parse DZN data content if provided
     parsed_data = if data_content, do: parse_dzn_output(data_content), else: %{}
 
+    # Add standard library preamble if enabled and not already present
+    auto_include = Keyword.get(opts, :auto_include_stdlib, true)
+    model_with_preamble = if auto_include, do: add_standard_preamble(model_content), else: model_content
+
     case Briefly.create(prefix: "minizinc_") do
       {:ok, model_file_base} ->
         # Briefly doesn't add extensions, so we need to add it manually
         model_file = model_file_base <> ".mzn"
         try do
-          :ok = File.write!(model_file, model_content)
+          :ok = File.write!(model_file, model_with_preamble)
           # Verify file exists and is readable
           unless File.exists?(model_file) do
             raise "Temporary file was not created: #{model_file}"
@@ -107,6 +117,27 @@ defmodule MiniZincMcp.Solver do
 
       {:error, reason} ->
         {:error, "Failed to create temporary file: #{inspect(reason)}"}
+    end
+  end
+
+  defp add_standard_preamble(model_content) do
+    # Standard MiniZinc library includes that are commonly needed
+    standard_includes = [
+      "include \"alldifferent.mzn\";"
+    ]
+
+    # Check if model already includes any of these
+    has_include = Enum.any?(standard_includes, fn include ->
+      String.contains?(model_content, include)
+    end)
+
+    if has_include do
+      # Model already has includes, don't add preamble
+      model_content
+    else
+      # Add standard preamble at the beginning
+      preamble = Enum.join(standard_includes, "\n") <> "\n\n"
+      preamble <> model_content
     end
   end
 
