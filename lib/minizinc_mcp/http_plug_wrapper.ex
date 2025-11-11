@@ -21,16 +21,62 @@ defmodule MiniZincMcp.HttpPlugWrapper do
   def call(conn, opts) do
     sse_enabled = Map.get(opts, :sse_enabled, true)
 
-    cond do
-      conn.method != "POST" || !sse_enabled ->
-        HttpPlug.call(conn, opts)
+    result =
+      cond do
+        conn.method != "POST" || !sse_enabled ->
+          HttpPlug.call(conn, opts)
 
-      has_session_id?(conn) ->
-        HttpPlug.call(conn, opts)
+        has_session_id?(conn) ->
+          HttpPlug.call(conn, opts)
 
-      true ->
-        handle_missing_session_id(conn, opts)
+        true ->
+          handle_missing_session_id(conn, opts)
+      end
+
+    # If the response has a 500 status but empty body, send a proper error response
+    case result do
+      %Plug.Conn{status: status, resp_body: body} when status == 500 and (body == "" or body == nil) ->
+        # Extract request ID from the request body if available
+        request_id = extract_request_id(conn)
+        error_response = %{
+          "jsonrpc" => "2.0",
+          "error" => %{
+            "code" => -32603,
+            "message" => "Internal error",
+            "data" => %{"reason" => "No response from handler"}
+          },
+          "id" => request_id
+        }
+        result
+        |> Plug.Conn.put_resp_content_type("application/json")
+        |> Plug.Conn.send_resp(500, Jason.encode!(error_response))
+
+      %Plug.Conn{} = conn_result ->
+        conn_result
+
+      other ->
+        other
     end
+  end
+
+  defp extract_request_id(conn) do
+    # Try to read the body without consuming it
+    case conn.body_params do
+      %{"id" => id} -> id
+      _ ->
+        # Fallback: try to read raw body
+        case Plug.Conn.read_body(conn, length: 4096) do
+          {:ok, body, _conn} ->
+            case Jason.decode(body) do
+              {:ok, %{"id" => id}} -> id
+              _ -> nil
+            end
+          _ ->
+            nil
+        end
+    end
+  rescue
+    _ -> nil
   end
 
   defp has_session_id?(conn) do

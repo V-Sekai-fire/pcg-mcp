@@ -89,7 +89,9 @@ defmodule MiniZincMcp.Solver do
 
     # Add standard library preamble if enabled and not already present
     auto_include = Keyword.get(opts, :auto_include_stdlib, true)
-    model_with_preamble = if auto_include, do: add_standard_preamble(model_content), else: model_content
+    # Trim leading whitespace/newlines before processing
+    trimmed_model = String.trim_leading(model_content)
+    model_with_preamble = if auto_include, do: add_standard_preamble(trimmed_model), else: trimmed_model
 
     case Briefly.create(prefix: "minizinc_") do
       {:ok, model_file_base} ->
@@ -385,10 +387,20 @@ defmodule MiniZincMcp.Solver do
         error_msg = if is_binary(error), do: error, else: inspect(error)
         {:error, error_msg}
       status in ["UNSATISFIABLE", "UNSAT"] -> 
-        Logger.warning("Problem is unsatisfiable (status: #{inspect(status)})")
-        {:error, "Problem is unsatisfiable"}
+        # UNSATISFIABLE is a valid result - the problem has no solution
+        Logger.info("Problem is unsatisfiable (status: #{inspect(status)})")
+        {:ok, %{status: status, message: "Problem is unsatisfiable - no solution exists"}}
+      status == "OPTIMAL_SOLUTION" or status == "SATISFIED" -> 
+        if map_size(solution) > 0 do
+          {:ok, solution}
+        else
+          {:ok, %{status: status}}
+        end
       map_size(solution) > 0 -> {:ok, solution}
-      status == "OPTIMAL_SOLUTION" or status == "SATISFIED" -> {:ok, %{status: status}}
+      status != nil -> 
+        # We have a status but no solution - return it as success with status
+        Logger.info("No solution found. Status: #{inspect(status)}, Solution map: #{inspect(solution)}")
+        {:ok, %{status: status, solution: solution}}
       true -> 
         # If we have no solution and no clear status, log warning
         Logger.warning("No solution found and no clear status. Solution map: #{inspect(solution)}, Status: #{inspect(status)}")
