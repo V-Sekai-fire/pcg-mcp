@@ -4,9 +4,12 @@ A Model Context Protocol (MCP) server that provides MiniZinc constraint programm
 
 ## Features
 
-- Solve MiniZinc models using chuffed solver
-- Support for both MZN (model) and DZN (data) content as strings
-- Output format: Parses DZN format for variable extraction, passthroughs output_text from explicit output statements
+- Solve MiniZinc models using chuffed solver (fixed, not configurable)
+- Support for both MZN (model) and DZN (data) content as strings or file paths
+- Automatic standard library inclusion (e.g., `alldifferent.mzn`) when not present in models
+- Comprehensive output format: Parses DZN format for variable extraction, passthroughs output_text from explicit output statements
+- JSON-RPC 2.0 protocol support via STDIO or HTTP transports
+- Server-Sent Events (SSE) support for streaming responses
 
 ## Quick Start
 
@@ -67,23 +70,38 @@ docker run -d -p 8081:8081 --name minizinc-mcp minizinc-mcp
 
 The server provides the following MCP tools:
 
-- `minizinc_solve` - Solve a MiniZinc model (chuffed solver only)
+### `minizinc_solve`
 
-### Standard Library Support
+Solve a MiniZinc model using the chuffed solver (fixed, not configurable).
+
+#### Parameters
+
+- `model_content` (string, required if `model_path` not provided): MiniZinc model content (.mzn) as string
+- `model_path` (string, required if `model_content` not provided): Path to .mzn MiniZinc model file
+- `data_content` (string, optional): DZN data content as string (e.g., `"n = 8;"`). Must be valid DZN format. Parsed and included in response as `input_data` field.
+- `data_path` (string, optional): Path to .dzn data file (alternative to `data_content`)
+- `timeout` (integer, optional): Timeout in milliseconds (default: 60000)
+- `auto_include_stdlib` (boolean, optional): Automatically include standard MiniZinc libraries (e.g., `alldifferent.mzn`) if not present (default: `true`)
+
+#### Standard Library Support
 
 The `minizinc_solve` tool automatically includes common MiniZinc standard libraries (e.g., `alldifferent.mzn`) 
-if they are not already present in the model. This means you can use standard functions like `all_different` 
-without needing to add explicit `include` statements.
+if they are not already present in the model (when `auto_include_stdlib` is `true`). This means you can use 
+standard functions like `all_different` without needing to add explicit `include` statements.
 
-### Output Format
+#### Output Format
 
-The `minizinc_solve` tool returns solutions in the following format:
+The `minizinc_solve` tool returns solutions as JSON in the following format:
 
 - **DZN format parsing**: When MiniZinc provides DZN format output (models without explicit `output` statements), variables are parsed and returned as structured data (e.g., `{"x": 10, "y": [1, 2, 3]}`)
 - **Output text passthrough**: When models include explicit `output` statements, the output text is passthrough'd in the `output_text` field (e.g., `{"output_text": "x = 10\n"}`)
 - **Both formats**: When both DZN and explicit output are available, both are included in the response
+- **Input data**: When `data_content` is provided, the parsed DZN data is included in the `input_data` field
+- **Status**: Solution status (e.g., `"SATISFIED"`, `"OPTIMAL_SOLUTION"`, `"UNSATISFIABLE"`) is included when available
 
-### Example
+The response is always returned as a JSON string in the MCP content field.
+
+### Examples
 
 **STDIO:**
 
@@ -108,6 +126,24 @@ curl -X POST http://localhost:8081/ \
   -H "Content-Type: application/json" \
   -H "mcp-protocol-version: 2025-06-18" \
   -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "minizinc_solve", "arguments": {"model_content": "var int: x; constraint x > 0; solve satisfy;"}}}'
+```
+
+**With data content:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "minizinc_solve",
+    "arguments": {
+      "model_content": "var int: n; array[1..n] of var int: x; constraint all_different(x); solve satisfy;",
+      "data_content": "n = 8;",
+      "timeout": 30000
+    }
+  }
+}
 ```
 
 ## Configuration
@@ -137,12 +173,54 @@ curl -X POST http://localhost:8081/ \
 
 **Debug mode**: Use `MIX_ENV=dev mix mcp.server` for verbose logging.
 
+## Version
+
+Current version: **1.0.0-dev1** (see `mix.exs` for latest version)
+
 ## Requirements
 
 - Elixir 1.18+
-- MiniZinc installed and available in PATH (or use Docker image)
+- Erlang/OTP 26+
+- MiniZinc 2.9.3+ installed and available in PATH (or use Docker image which includes MiniZinc)
+
+## Development
+
+### Building
+
+```bash
+mix deps.get
+mix compile
+```
+
+### Testing
+
+```bash
+mix test
+```
+
+### Building Release
+
+```bash
+MIX_ENV=prod mix release
+```
+
+### Running Locally
+
+For STDIO transport (default):
+```bash
+mix mcp.server
+```
+
+For HTTP transport:
+```bash
+MCP_TRANSPORT=http PORT=8081 mix run --no-halt
+```
 
 ## License
 
 MIT License - see LICENSE.md for details.
+
+## Copyright
+
+Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
