@@ -62,7 +62,7 @@ defmodule MiniZincMcp.HttpPlugWrapper do
           error_response = %{
             "jsonrpc" => "2.0",
             "error" => %{
-              "code" => -32603,
+              "code" => -32_603,
               "message" => "Internal error",
               "data" => %{"reason" => "No response from handler - empty body"}
             },

@@ -57,7 +57,7 @@ defmodule MiniZincMcp.Application do
     # - strategy: :one_for_one means if one child crashes, only restart that child
     # - max_restarts: maximum number of restarts in max_seconds before supervisor terminates
     # - max_seconds: time window for max_restarts
-    # 
+    #
     # IMPORTANT: If max_restarts is exceeded, the supervisor terminates.
     # Since this is the Application supervisor, the entire application will stop.
     # This is standard Erlang "let it crash" behavior - if a process keeps crashing

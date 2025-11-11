@@ -336,14 +336,12 @@ defmodule MiniZincMcp.Solver do
   defp cleanup_file(nil), do: :ok
 
   defp cleanup_file(file_path) do
-    try do
-      if File.exists?(file_path) do
-        File.rm(file_path)
-        Logger.debug("Cleaned up temporary file: #{file_path}")
-      end
-    rescue
-      e -> Logger.warning("Failed to cleanup file #{file_path}: #{inspect(e)}")
+    if File.exists?(file_path) do
+      File.rm(file_path)
+      Logger.debug("Cleaned up temporary file: #{file_path}")
     end
+  rescue
+    e -> Logger.warning("Failed to cleanup file #{file_path}: #{inspect(e)}")
   end
 
   defp parse_json_output(output) do
@@ -597,7 +595,7 @@ defmodule MiniZincMcp.Solver do
 
       # String (quoted)
       String.starts_with?(value_str, "\"") and String.ends_with?(value_str, "\"") ->
-        String.slice(value_str, 1..-2)
+        String.slice(value_str, 1..-2//-1)
 
       # Default: return as string
       true ->
@@ -610,7 +608,7 @@ defmodule MiniZincMcp.Solver do
     # Remove [| and |]
     content =
       array_str
-      |> String.slice(2..-3)
+      |> String.slice(2..-3//-1)
       |> String.trim()
 
     # Split by | to get rows
@@ -628,7 +626,7 @@ defmodule MiniZincMcp.Solver do
     # Parse {1, 2, 3} format
     content =
       set_str
-      |> String.slice(1..-2)
+      |> String.slice(1..-2//-1)
       |> String.trim()
 
     case content do
@@ -649,7 +647,7 @@ defmodule MiniZincMcp.Solver do
     # Parse [1, 2, 3] format
     content =
       array_str
-      |> String.slice(1..-2)
+      |> String.slice(1..-2//-1)
       |> String.trim()
 
     case content do

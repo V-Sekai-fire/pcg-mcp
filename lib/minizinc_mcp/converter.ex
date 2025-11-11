@@ -196,41 +196,6 @@ defmodule MiniZincMcp.Converter do
     end
   end
 
-  defp extract_predicates_from_domain(domain) when is_map(domain) do
-    # Extract predicates from domain metadata or infer from commands/tasks
-    predicates = Map.get(Map.get(domain, :metadata) || %{}, "predicates", [])
-
-    if predicates == [] do
-      # Try to infer from domain type
-      case Map.get(domain, :domain_type) do
-        "aircraft_disassembly" ->
-          ["activity_status", "precedence", "resource_assigned", "location_capacity"]
-
-        "tiny_cvrp" ->
-          ["vehicle_at", "customer_visited", "vehicle_capacity"]
-
-        "neighbours" ->
-          ["grid_value"]
-
-        "fox_geese_corn" ->
-          [
-            "boat_location",
-            "east_fox",
-            "east_geese",
-            "east_corn",
-            "west_fox",
-            "west_geese",
-            "west_corn"
-          ]
-
-        _ ->
-          []
-      end
-    else
-      predicates
-    end
-  end
-
   # Private helper functions
 
   defp get_module_source(module) do
@@ -376,8 +341,6 @@ defmodule MiniZincMcp.Converter do
       end)
       |> List.flatten()
 
-    all_constraints = command_constraints ++ task_constraints ++ multigoal_constraints
-
     # Combine into single MiniZinc model
     minizinc = """
     % MiniZinc model for domain: #{domain_name}
@@ -404,8 +367,7 @@ defmodule MiniZincMcp.Converter do
   defp generate_variable_declarations(predicates, entities) do
     # Generate variable declarations for predicates
     predicate_vars =
-      predicates
-      |> Enum.map(fn pred ->
+      Enum.map_join(predicates, "\n", fn pred ->
         pred_name =
           if is_binary(pred),
             do: pred,
@@ -413,12 +375,10 @@ defmodule MiniZincMcp.Converter do
 
         "var bool: #{pred_name};"
       end)
-      |> Enum.join("\n")
 
     # Generate variable declarations for entities if needed
     entity_vars =
-      entities
-      |> Enum.map(fn entity ->
+      Enum.map_join(entities, "\n", fn entity ->
         entity_name =
           if is_binary(entity),
             do: entity,
@@ -426,7 +386,6 @@ defmodule MiniZincMcp.Converter do
 
         "var int: #{entity_name};"
       end)
-      |> Enum.join("\n")
 
     [predicate_vars, entity_vars]
     |> Enum.filter(&(&1 != ""))
@@ -577,7 +536,7 @@ defmodule MiniZincMcp.Converter do
 
         {:|>, _, [arg, {:., _, [{:__aliases__, _, path}, :set]}]} = node, acc ->
           # Predicate set operation
-          predicate_name = path |> Enum.map(&to_string/1) |> Enum.join(".")
+          predicate_name = Enum.map_join(path, ".", &to_string/1)
           {node, acc ++ [{:predicate_set, predicate_name, arg}]}
 
         node, acc ->
@@ -595,7 +554,7 @@ defmodule MiniZincMcp.Converter do
       Macro.postwalk(ast, predicates, fn
         {:alias, _, [{:__aliases__, _, path}]} = node, acc ->
           # Check if it's a Predicate module
-          path_str = path |> Enum.map(&to_string/1) |> Enum.join(".")
+          path_str = Enum.map_join(path, ".", &to_string/1)
 
           if String.contains?(path_str, "Predicate") do
             {node, acc ++ [path_str]}
@@ -912,8 +871,8 @@ defmodule MiniZincMcp.Converter do
 
       # Function call: Module.function(args)
       {{:., _, [{:__aliases__, _, path}, fun]}, _, args} ->
-        module_str = path |> Enum.map(&Atom.to_string/1) |> Enum.join(".")
-        args_str = args |> Enum.map(&ast_to_minizinc_expr/1) |> Enum.join(", ")
+        module_str = Enum.map_join(path, ".", &Atom.to_string/1)
+        args_str = Enum.map_join(args, ", ", &ast_to_minizinc_expr/1)
         "#{module_str}.#{fun}(#{args_str})"
 
       # Access: map.field or map["key"]
@@ -924,7 +883,7 @@ defmodule MiniZincMcp.Converter do
 
       # List/tuple - convert to string representation
       list when is_list(list) ->
-        items = list |> Enum.map(&ast_to_minizinc_expr/1) |> Enum.join(", ")
+        items = Enum.map_join(list, ", ", &ast_to_minizinc_expr/1)
         "[#{items}]"
 
       # Tuple
@@ -999,26 +958,6 @@ defmodule MiniZincMcp.Converter do
 
   defp format_goals([]), do: "% (none)"
   defp format_goals(goals), do: inspect(goals)
-
-  defp format_preconditions_from_strings([]), do: "% (none)"
-
-  defp format_preconditions_from_strings(preconditions) when is_list(preconditions) do
-    Enum.map_join(preconditions, "\n", fn prec ->
-      "%   - #{prec}"
-    end)
-  end
-
-  defp format_preconditions_from_strings(_), do: "% (none)"
-
-  defp format_effects_from_strings([]), do: "% (none)"
-
-  defp format_effects_from_strings(effects) when is_list(effects) do
-    Enum.map_join(effects, "\n", fn effect ->
-      "%   - #{effect}"
-    end)
-  end
-
-  defp format_effects_from_strings(_), do: "% (none)"
 
   defp format_constraint(constraint) do
     "%   constraint: #{inspect(constraint)}"
