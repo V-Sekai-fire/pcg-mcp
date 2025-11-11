@@ -112,6 +112,8 @@ COPY --from=builder /opt/elixir /opt/elixir
 # Copy MiniZinc installation from builder
 COPY --from=builder /opt/minizinc /opt/minizinc
 
+# Set PATH to include Elixir and MiniZinc binaries
+# This ensures System.cmd("minizinc", ...) in the release can find the minizinc binary
 ENV PATH="/opt/elixir/bin:/opt/minizinc/bin:${PATH}"
 
 # Copy the release from builder
@@ -124,8 +126,8 @@ ENV PORT=8081
 ENV ELIXIR_ERL_OPTIONS="+fnu"
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
-# Ensure MiniZinc is in PATH for the release
-ENV PATH="/opt/minizinc/bin:${PATH}"
+# PATH is already set above (line 115) to include /opt/minizinc/bin
+# This ensures System.cmd("minizinc", ...) can find the minizinc binary
 
 # Expose the port
 EXPOSE 8081
