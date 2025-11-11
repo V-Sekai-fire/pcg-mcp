@@ -8,8 +8,6 @@ defmodule MiniZincMcp.NativeService do
 
   This server provides tools for:
   - Solving MiniZinc models (using chuffed solver only)
-  - Listing available solvers
-  - Checking MiniZinc availability
 
   ## Output Format
 
@@ -102,41 +100,6 @@ defmodule MiniZincMcp.NativeService do
     })
   end
 
-  deftool "minizinc_list_solvers" do
-    meta do
-      name("List Available Solvers")
-      description("Lists all available MiniZinc solvers")
-    end
-
-    input_schema(%{
-      type: "object",
-      properties: %{}
-    })
-
-    tool_annotations(%{
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true
-    })
-  end
-
-  deftool "minizinc_check_available" do
-    meta do
-      name("Check MiniZinc Availability")
-      description("Checks if MiniZinc is available on the system")
-    end
-
-    input_schema(%{
-      type: "object",
-      properties: %{}
-    })
-
-    tool_annotations(%{
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true
-    })
-  end
 
   # Initialize handler
   @impl true
@@ -162,12 +125,6 @@ defmodule MiniZincMcp.NativeService do
     case tool_name do
       "minizinc_solve" ->
         handle_solve(args, state)
-
-      "minizinc_list_solvers" ->
-        handle_list_solvers(state)
-
-      "minizinc_check_available" ->
-        handle_check_available(state)
 
       _ ->
         {:error, "Tool not found: #{tool_name}", state}
@@ -209,21 +166,4 @@ defmodule MiniZincMcp.NativeService do
     end
   end
 
-  defp handle_list_solvers(state) do
-    case Solver.list_solvers() do
-      {:ok, solvers} ->
-        solvers_json = Jason.encode!(solvers)
-        {:ok, %{content: [text(solvers_json)]}, state}
-
-      {:error, reason} ->
-        {:error, "Failed to list solvers: #{reason}", state}
-    end
-  end
-
-  defp handle_check_available(state) do
-    available = Solver.available?()
-    result = %{available: available}
-    result_json = Jason.encode!(result)
-    {:ok, %{content: [text(result_json)]}, state}
-  end
 end

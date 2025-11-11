@@ -7,8 +7,6 @@ A Model Context Protocol (MCP) server that provides MiniZinc constraint programm
 - Solve MiniZinc models using chuffed solver
 - Support for both MZN (model) and DZN (data) content as strings
 - Output format: Parses DZN format for variable extraction, passthroughs output_text from explicit output statements
-- List available MiniZinc solvers
-- Check MiniZinc availability
 
 ## Quick Start
 
@@ -70,8 +68,6 @@ docker run -d -p 8081:8081 --name minizinc-mcp minizinc-mcp
 The server provides the following MCP tools:
 
 - `minizinc_solve` - Solve a MiniZinc model (chuffed solver only)
-- `minizinc_list_solvers` - List available solvers
-- `minizinc_check_available` - Check if MiniZinc is available
 
 ### Output Format
 
