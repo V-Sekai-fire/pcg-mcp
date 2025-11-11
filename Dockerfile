@@ -45,12 +45,25 @@ RUN mix local.hex --force && \
 
 # Install MiniZinc
 # Download and install MiniZinc from official releases
+# Using MiniZincIDE bundle which includes MiniZinc compiler and solvers
 RUN cd /tmp && \
-    curl -Lf https://github.com/MiniZinc/MiniZinc/releases/download/2.9.0/minizinc-2.9.0-linux-x86_64.tar.gz -o minizinc.tar.gz && \
+    curl -Lf https://github.com/MiniZinc/MiniZincIDE/releases/download/2.9.3/MiniZincIDE-2.9.3-bundle-linux-x86_64.tgz -o minizinc.tar.gz && \
     tar -xzf minizinc.tar.gz && \
     mkdir -p /opt/minizinc && \
-    mv minizinc-2.9.0/* /opt/minizinc/ && \
-    rm -rf minizinc.tar.gz minizinc-2.9.0 && \
+    # The bundle extracts to a directory - find it and copy contents
+    EXTRACTED_DIR=$(ls -d MiniZincIDE* 2>/dev/null | head -1) && \
+    if [ -n "$EXTRACTED_DIR" ] && [ -d "$EXTRACTED_DIR" ]; then \
+        cp -r "$EXTRACTED_DIR"/* /opt/minizinc/; \
+    else \
+        # Fallback: look for bin/minizinc in current directory or subdirectories
+        EXTRACTED_DIR=$(find . -name "minizinc" -type f -path "*/bin/minizinc" | head -1 | xargs dirname | xargs dirname) && \
+        if [ -n "$EXTRACTED_DIR" ] && [ -d "$EXTRACTED_DIR" ]; then \
+            cp -r "$EXTRACTED_DIR"/* /opt/minizinc/; \
+        else \
+            echo "Error: Could not find extracted MiniZinc directory" && exit 1; \
+        fi; \
+    fi && \
+    rm -rf minizinc.tar.gz MiniZincIDE* && \
     /opt/minizinc/bin/minizinc --version
 
 ENV PATH="/opt/minizinc/bin:${PATH}"

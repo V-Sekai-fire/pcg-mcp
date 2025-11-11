@@ -37,7 +37,8 @@ defmodule MiniZincMcp.Converter do
       {:ok, minizinc_code} = MiniZincConverter.convert_domain(domain)
   """
 
-  alias AriaCore.PlanningDomain
+  # Note: AriaCore.PlanningDomain is optional - if not available, use map() instead
+  # alias AriaCore.PlanningDomain
 
   @doc """
   Converts a command module to MiniZinc format.
@@ -136,20 +137,7 @@ defmodule MiniZincMcp.Converter do
   Combines all domain elements (commands, tasks, multigoals) into a single
   MiniZinc model.
   """
-  @spec convert_domain(PlanningDomain.t() | map()) :: {:ok, String.t()} | {:error, String.t()}
-  def convert_domain(%PlanningDomain{} = domain) do
-    domain_map = %{
-      name: domain.name,
-      domain_type: domain.domain_type,
-      commands: domain.commands,
-      tasks: domain.tasks,
-      multigoals: domain.multigoals,
-      predicates: extract_predicates_from_domain(domain),
-      entities: domain.entities
-    }
-    convert_domain_from_maps(domain_map)
-  end
-
+  @spec convert_domain(map()) :: {:ok, String.t()} | {:error, String.t()}
   def convert_domain(domain_map) when is_map(domain_map) do
     convert_domain_from_maps(domain_map)
   end
@@ -167,7 +155,7 @@ defmodule MiniZincMcp.Converter do
   - `{:ok, path}` - Path to saved file
   - `{:error, reason}` - Error reason
   """
-  @spec convert_domain_to_file(PlanningDomain.t() | map(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec convert_domain_to_file(map(), String.t()) :: {:ok, String.t()} | {:error, String.t()}
   def convert_domain_to_file(domain, output_path) do
     case convert_domain(domain) do
       {:ok, minizinc_code} ->
@@ -195,7 +183,7 @@ defmodule MiniZincMcp.Converter do
   - `{:ok, solution}` - Parsed solution
   - `{:error, reason}` - Error reason
   """
-  @spec convert_and_solve(PlanningDomain.t() | map(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
+  @spec convert_and_solve(map(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
   def convert_and_solve(domain, data_path \\ nil, opts \\ []) do
     case convert_domain(domain) do
       {:ok, minizinc_code} ->
@@ -206,12 +194,12 @@ defmodule MiniZincMcp.Converter do
     end
   end
 
-  defp extract_predicates_from_domain(%PlanningDomain{} = domain) do
+  defp extract_predicates_from_domain(domain) when is_map(domain) do
     # Extract predicates from domain metadata or infer from commands/tasks
-    predicates = Map.get(domain.metadata || %{}, "predicates", [])
+    predicates = Map.get(Map.get(domain, :metadata) || %{}, "predicates", [])
     if predicates == [] do
       # Try to infer from domain type
-      case domain.domain_type do
+      case Map.get(domain, :domain_type) do
         "aircraft_disassembly" -> ["activity_status", "precedence", "resource_assigned", "location_capacity"]
         "tiny_cvrp" -> ["vehicle_at", "customer_visited", "vehicle_capacity"]
         "neighbours" -> ["grid_value"]
