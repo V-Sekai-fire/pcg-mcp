@@ -124,6 +124,8 @@ ENV PORT=8081
 ENV ELIXIR_ERL_OPTIONS="+fnu"
 ENV LANG=C.UTF-8
 ENV LC_ALL=C.UTF-8
+# Ensure MiniZinc is in PATH for the release
+ENV PATH="/opt/minizinc/bin:${PATH}"
 
 # Expose the port
 EXPOSE 8081
