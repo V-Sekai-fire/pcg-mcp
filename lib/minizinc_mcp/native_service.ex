@@ -31,6 +31,17 @@ defmodule MiniZincMcp.NativeService do
 
   alias MiniZincMcp.Solver
 
+  @spec child_spec(term()) :: Supervisor.child_spec()
+  def child_spec(opts) do
+    %{
+      id: __MODULE__,
+      start: {__MODULE__, :start_link, [opts]},
+      type: :worker,
+      restart: :permanent,
+      shutdown: 5000
+    }
+  end
+
   # Override do_start_link to start without name when no name is provided
   # This prevents conflicts when ExMCP.MessageProcessor starts temporary instances
   # MessageProcessor now handles :already_started gracefully

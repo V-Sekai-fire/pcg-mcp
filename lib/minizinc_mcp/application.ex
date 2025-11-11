@@ -21,19 +21,36 @@ defmodule MiniZincMcp.Application do
           # For HTTP transport, don't start NativeService as supervisor child
           # MessageProcessor will start temporary instances per request
           # Our override ensures they start without names to avoid conflicts
+          # HttpServer has :permanent restart in its child_spec
           [
             {MiniZincMcp.HttpServer, [port: port, host: host]}
           ]
 
         :stdio ->
           # For stdio transport, start NativeService as supervisor child
+          # Both children have :permanent restart in their child_spec, so supervisor will restart them if they crash
           [
             {MiniZincMcp.NativeService, [name: MiniZincMcp.NativeService]},
             {MiniZincMcp.StdioServer, []}
           ]
       end
 
-    opts = [strategy: :one_for_one, name: MiniZincMcp.Supervisor]
+    # Standard Erlang/OTP supervisor configuration
+    # - strategy: :one_for_one means if one child crashes, only restart that child
+    # - max_restarts: maximum number of restarts in max_seconds before supervisor terminates
+    # - max_seconds: time window for max_restarts
+    # 
+    # IMPORTANT: If max_restarts is exceeded, the supervisor terminates.
+    # Since this is the Application supervisor, the entire application will stop.
+    # This is standard Erlang "let it crash" behavior - if a process keeps crashing
+    # repeatedly, something is fundamentally wrong and it's better to stop.
+    # In production, use a process manager (systemd, Docker restart, etc.) to restart the app.
+    opts = [
+      strategy: :one_for_one,
+      name: MiniZincMcp.Supervisor,
+      max_restarts: 10,
+      max_seconds: 60
+    ]
     Supervisor.start_link(children, opts)
   end
 
