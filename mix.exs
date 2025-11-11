@@ -32,7 +32,7 @@ defmodule MiniZincMcp.MixProject do
   def application do
     [
       mod: {MiniZincMcp.Application, []},
-      applications: [:logger, :ex_mcp, :jason, :plug_cowboy]
+      applications: [:logger, :ex_mcp, :jason, :plug_cowboy, :briefly]
     ]
   end
 
@@ -43,6 +43,7 @@ defmodule MiniZincMcp.MixProject do
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.7"},
       {:sourceror, "~> 1.10"},
+      {:briefly, "~> 0.4"},
       {:dialyxir, "~> 1.4.6", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]

@@ -48,14 +48,42 @@ defmodule MiniZincMcp.Solver do
   """
   @spec solve_string(String.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
   def solve_string(model_content, data_content \\ nil, opts \\ []) do
-    model_file = write_temp_file(model_content, ".mzn")
-    data_file = if data_content, do: write_temp_file(data_content, ".dzn"), else: nil
+    case Briefly.create(prefix: "minizinc_") do
+      {:ok, model_file_base} ->
+        # Briefly doesn't add extensions, so we need to add it manually
+        model_file = model_file_base <> ".mzn"
+        try do
+          :ok = File.write!(model_file, model_content)
+          # Verify file exists and is readable
+          unless File.exists?(model_file) do
+            raise "Temporary file was not created: #{model_file}"
+          end
+          data_file = maybe_create_data_file(data_content)
+          solve(model_file, data_file, opts)
+        rescue
+          e -> {:error, "Failed to write temporary file: #{inspect(e)}"}
+        end
 
-    try do
-      solve(model_file, data_file, opts)
-    after
-      File.rm(model_file)
-      if data_file, do: File.rm(data_file)
+      {:error, reason} ->
+        {:error, "Failed to create temporary file: #{inspect(reason)}"}
+    end
+  end
+
+  defp maybe_create_data_file(nil), do: nil
+  defp maybe_create_data_file(data_content) do
+    case Briefly.create(prefix: "minizinc_") do
+      {:ok, data_file_base} ->
+        # Briefly doesn't add extensions, so we need to add it manually
+        data_file = data_file_base <> ".dzn"
+        File.write!(data_file, data_content)
+        # Verify file exists
+        unless File.exists?(data_file) do
+          raise "Data file was not created: #{data_file}"
+        end
+        data_file
+
+      {:error, reason} ->
+        raise "Failed to create data file: #{inspect(reason)}"
     end
   end
 
@@ -328,11 +356,4 @@ defmodule MiniZincMcp.Solver do
     |> Enum.filter(&(&1 != ""))
   end
 
-  defp write_temp_file(content, extension) do
-    tmp_dir = System.tmp_dir!()
-    filename = "minizinc_#{:rand.uniform(1_000_000)}#{extension}"
-    path = Path.join(tmp_dir, filename)
-    File.write!(path, content)
-    path
-  end
 end
