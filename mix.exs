@@ -32,7 +32,7 @@ defmodule MiniZincMcp.MixProject do
   def application do
     [
       mod: {MiniZincMcp.Application, []},
-      applications: [:logger, :ex_mcp, :jason, :plug_cowboy, :briefly]
+      applications: [:logger, :ex_mcp, :jason, :plug_cowboy, :briefly, :porcelain]
     ]
   end
 
