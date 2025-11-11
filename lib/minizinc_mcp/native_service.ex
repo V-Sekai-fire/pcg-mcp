@@ -61,13 +61,14 @@ defmodule MiniZincMcp.NativeService do
   deftool "minizinc_solve" do
     meta do
       name("Solve MiniZinc Model")
+
       description("""
       Solves a MiniZinc model file or string content using chuffed solver (fixed, not configurable).
-      
+
       Standard libraries: By default, automatically includes common MiniZinc standard libraries (e.g., alldifferent.mzn) 
       if not already present in the model. This can be controlled via the auto_include_stdlib parameter (default: true).
       This allows models to use standard functions without explicit includes.
-      
+
       Output format:
       - DZN format: Variables are parsed from DZN format when available (models without explicit output statements)
       - Output text: Explicit output statements are passthrough'd in output_text field
@@ -92,7 +93,8 @@ defmodule MiniZincMcp.NativeService do
         },
         data_content: %{
           type: "string",
-          description: "Optional .dzn data content as string. Must be valid DZN format (e.g., 'n = 8;'). Parsed and included in response."
+          description:
+            "Optional .dzn data content as string. Must be valid DZN format (e.g., 'n = 8;'). Parsed and included in response."
         },
         timeout: %{
           type: "integer",
@@ -101,7 +103,8 @@ defmodule MiniZincMcp.NativeService do
         },
         auto_include_stdlib: %{
           type: "boolean",
-          description: "Automatically include standard MiniZinc libraries (e.g., alldifferent.mzn) if not present (default: true)",
+          description:
+            "Automatically include standard MiniZinc libraries (e.g., alldifferent.mzn) if not present (default: true)",
           default: true
         }
       }
@@ -113,7 +116,6 @@ defmodule MiniZincMcp.NativeService do
       idempotentHint: false
     })
   end
-
 
   # Initialize handler
   @impl true
@@ -148,7 +150,7 @@ defmodule MiniZincMcp.NativeService do
   defp handle_solve(args, state) do
     # Ensure args is a map
     args = if is_map(args), do: args, else: %{}
-    
+
     model_path = Map.get(args, "model_path")
     model_content = Map.get(args, "model_content")
     data_path = Map.get(args, "data_path")
@@ -180,7 +182,7 @@ defmodule MiniZincMcp.NativeService do
         # Recursively convert atom keys to strings
         solution_map = normalize_for_json(solution)
         solution_json = Jason.encode!(solution_map)
-        
+
         # Create content item with string keys for JSON compatibility
         content_item = %{"type" => "text", "text" => solution_json}
         response = %{"content" => [content_item]}
@@ -196,15 +198,17 @@ defmodule MiniZincMcp.NativeService do
   # Recursively convert atom keys to strings for JSON encoding
   defp normalize_for_json(value) when is_map(value) do
     Enum.reduce(value, %{}, fn
-      {k, v}, acc when is_atom(k) -> 
+      {k, v}, acc when is_atom(k) ->
         Map.put(acc, Atom.to_string(k), normalize_for_json(v))
-      {k, v}, acc -> 
+
+      {k, v}, acc ->
         Map.put(acc, k, normalize_for_json(v))
     end)
   end
+
   defp normalize_for_json(value) when is_list(value) do
     Enum.map(value, &normalize_for_json/1)
   end
-  defp normalize_for_json(value), do: value
 
+  defp normalize_for_json(value), do: value
 end

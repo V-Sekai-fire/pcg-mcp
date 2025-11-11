@@ -9,8 +9,8 @@ defmodule MiniZincMcp.Router do
 
   use Plug.Router
 
-  plug :match
-  plug :dispatch
+  plug(:match)
+  plug(:dispatch)
 
   # Health check endpoint for Docker/Smithery
   get "/health" do
@@ -18,7 +18,7 @@ defmodule MiniZincMcp.Router do
   end
 
   # Forward all other requests to HttpPlugWrapper (which fixes SSE fallback)
-  forward "/",
+  forward("/",
     to: MiniZincMcp.HttpPlugWrapper,
     init_opts: [
       handler: MiniZincMcp.NativeService,
@@ -31,4 +31,5 @@ defmodule MiniZincMcp.Router do
       sse_enabled: System.get_env("MCP_SSE_ENABLED") != "false",
       cors_enabled: true
     ]
+  )
 end

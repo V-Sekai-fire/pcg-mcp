@@ -39,20 +39,22 @@ defmodule MiniZincMcp.HttpPlugWrapper do
       %Plug.Conn{status: status} = conn_result when status == 500 ->
         require Logger
         # Check if body is empty - resp_body might not be set yet, check state
-        body = case conn_result.resp_body do
-          nil -> ""
-          "" -> ""
-          body when is_binary(body) -> 
-            if String.length(body) == 0, do: "", else: body
-          _ -> ""
-        end
-        
+        body =
+          case conn_result.resp_body do
+            nil -> ""
+            "" -> ""
+            body when is_binary(body) -> if String.length(body) == 0, do: "", else: body
+            _ -> ""
+          end
+
         # Also check content-length header
         content_length = Plug.Conn.get_resp_header(conn_result, "content-length")
         is_empty = body == "" or (content_length != [] and List.first(content_length) == "0")
-        
-        Logger.debug("HttpPlugWrapper: 500 response, body length: #{String.length(body || "")}, content-length: #{inspect(content_length)}, is_empty: #{is_empty}")
-        
+
+        Logger.debug(
+          "HttpPlugWrapper: 500 response, body length: #{String.length(body || "")}, content-length: #{inspect(content_length)}, is_empty: #{is_empty}"
+        )
+
         if is_empty do
           # Extract request ID from the request body if available
           request_id = extract_request_id(conn)
@@ -66,7 +68,11 @@ defmodule MiniZincMcp.HttpPlugWrapper do
             },
             "id" => request_id
           }
-          Logger.info("HttpPlugWrapper: Replacing empty 500 response with JSON-RPC error: #{inspect(error_response)}")
+
+          Logger.info(
+            "HttpPlugWrapper: Replacing empty 500 response with JSON-RPC error: #{inspect(error_response)}"
+          )
+
           conn_result
           |> Plug.Conn.put_resp_content_type("application/json")
           |> Plug.Conn.send_resp(500, Jason.encode!(error_response))
@@ -85,7 +91,9 @@ defmodule MiniZincMcp.HttpPlugWrapper do
   defp extract_request_id(conn) do
     # Try to read the body without consuming it
     case conn.body_params do
-      %{"id" => id} -> id
+      %{"id" => id} ->
+        id
+
       _ ->
         # Fallback: try to read raw body
         case Plug.Conn.read_body(conn, length: 4096) do
@@ -94,6 +102,7 @@ defmodule MiniZincMcp.HttpPlugWrapper do
               {:ok, %{"id" => id}} -> id
               _ -> nil
             end
+
           _ ->
             nil
         end
@@ -127,7 +136,10 @@ defmodule MiniZincMcp.HttpPlugWrapper do
       all_entries = :ets.tab2list(table)
 
       require Logger
-      Logger.debug("HttpPlugWrapper: Found #{length(all_entries)} entries in ETS table: #{inspect(all_entries)}")
+
+      Logger.debug(
+        "HttpPlugWrapper: Found #{length(all_entries)} entries in ETS table: #{inspect(all_entries)}"
+      )
 
       # Filter to only alive handler processes
       alive_sessions =
@@ -147,7 +159,9 @@ defmodule MiniZincMcp.HttpPlugWrapper do
         end)
         |> Enum.map(fn {session_id, _} -> session_id end)
 
-      Logger.debug("HttpPlugWrapper: Found #{length(alive_sessions)} alive SSE sessions: #{inspect(alive_sessions)}")
+      Logger.debug(
+        "HttpPlugWrapper: Found #{length(alive_sessions)} alive SSE sessions: #{inspect(alive_sessions)}"
+      )
 
       case alive_sessions do
         [session_id | _] ->

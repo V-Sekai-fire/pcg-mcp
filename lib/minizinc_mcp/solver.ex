@@ -82,7 +82,8 @@ defmodule MiniZincMcp.Solver do
 
   Same as solve/3. The `input_data` field contains parsed DZN data when `data_content` is provided.
   """
-  @spec solve_string(String.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
+  @spec solve_string(String.t(), String.t() | nil, keyword()) ::
+          {:ok, map()} | {:error, String.t()}
   def solve_string(model_content, data_content \\ nil, opts \\ []) do
     # Parse DZN data content if provided
     parsed_data = if data_content, do: parse_dzn_output(data_content), else: %{}
@@ -91,21 +92,25 @@ defmodule MiniZincMcp.Solver do
     auto_include = Keyword.get(opts, :auto_include_stdlib, true)
     # Trim leading whitespace/newlines before processing
     trimmed_model = String.trim_leading(model_content)
-    model_with_preamble = if auto_include, do: add_standard_preamble(trimmed_model), else: trimmed_model
+
+    model_with_preamble =
+      if auto_include, do: add_standard_preamble(trimmed_model), else: trimmed_model
 
     case Briefly.create(prefix: "minizinc_") do
       {:ok, model_file_base} ->
         # Briefly doesn't add extensions, so we need to add it manually
         model_file = model_file_base <> ".mzn"
         data_file = nil
-        
+
         try do
           :ok = File.write!(model_file, model_with_preamble)
           # Verify file exists and is readable
           unless File.exists?(model_file) do
             raise "Temporary file was not created: #{model_file}"
           end
+
           data_file = maybe_create_data_file(data_content)
+
           case solve(model_file, data_file, opts) do
             {:ok, solution} ->
               # Merge parsed input data into solution for reference
@@ -135,9 +140,10 @@ defmodule MiniZincMcp.Solver do
     ]
 
     # Check if model already includes any of these
-    has_include = Enum.any?(standard_includes, fn include ->
-      String.contains?(model_content, include)
-    end)
+    has_include =
+      Enum.any?(standard_includes, fn include ->
+        String.contains?(model_content, include)
+      end)
 
     if has_include do
       # Model already has includes, don't add preamble
@@ -150,6 +156,7 @@ defmodule MiniZincMcp.Solver do
   end
 
   defp maybe_create_data_file(nil), do: nil
+
   defp maybe_create_data_file(data_content) do
     case Briefly.create(prefix: "minizinc_") do
       {:ok, data_file_base} ->
@@ -160,6 +167,7 @@ defmodule MiniZincMcp.Solver do
         unless File.exists?(data_file) do
           raise "Data file was not created: #{data_file}"
         end
+
         data_file
 
       {:error, reason} ->
@@ -185,9 +193,10 @@ defmodule MiniZincMcp.Solver do
   """
   @spec list_solvers() :: {:ok, [String.t()]} | {:error, String.t()}
   def list_solvers do
-    task = Task.async(fn ->
-      System.cmd("minizinc", ["--solvers"], stderr_to_stdout: true)
-    end)
+    task =
+      Task.async(fn ->
+        System.cmd("minizinc", ["--solvers"], stderr_to_stdout: true)
+      end)
 
     case Task.yield(task, 5000) || Task.shutdown(task) do
       {:ok, {output, 0}} ->
@@ -215,9 +224,10 @@ defmodule MiniZincMcp.Solver do
     Logger.debug("Running minizinc with args: #{inspect(cmd_args)}")
 
     try do
-      task = Task.async(fn ->
-        System.cmd("minizinc", cmd_args, stderr_to_stdout: true)
-      end)
+      task =
+        Task.async(fn ->
+          System.cmd("minizinc", cmd_args, stderr_to_stdout: true)
+        end)
 
       case Task.yield(task, timeout) || Task.shutdown(task) do
         {:ok, {output, 0}} ->
@@ -225,33 +235,48 @@ defmodule MiniZincMcp.Solver do
 
         {:ok, {output, exit_status}} ->
           # Log full output for debugging (both stdout and stderr are captured via stderr_to_stdout)
-          Logger.debug("MiniZinc returned exit status #{exit_status}, output length: #{String.length(output)}")
+          Logger.debug(
+            "MiniZinc returned exit status #{exit_status}, output length: #{String.length(output)}"
+          )
+
           Logger.debug("MiniZinc output: #{inspect(String.slice(output, 0, 1000))}")
-          
+
           # Always try to parse JSON output first, regardless of exit status
           # MiniZinc may return valid JSON with status "UNSATISFIABLE" even with non-zero exit code
           case parse_json_output(output) do
-            {:ok, solution} -> 
+            {:ok, solution} ->
               # Successfully parsed - return the solution even if exit status was non-zero
               {:ok, solution}
+
             {:error, parse_error} ->
               # JSON parsing failed - include full output in error message
-              output_preview = if String.length(output) > 2000 do
-                String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
-              else
-                output
-              end
-              Logger.error("Failed to parse MiniZinc output. Exit status: #{exit_status}, Parse error: #{inspect(parse_error)}")
-              {:error, "MiniZinc failed with exit status #{exit_status}. Output:\n#{output_preview}"}
+              output_preview =
+                if String.length(output) > 2000 do
+                  String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
+                else
+                  output
+                end
+
+              Logger.error(
+                "Failed to parse MiniZinc output. Exit status: #{exit_status}, Parse error: #{inspect(parse_error)}"
+              )
+
+              {:error,
+               "MiniZinc failed with exit status #{exit_status}. Output:\n#{output_preview}"}
+
             other ->
               # Unexpected return from parse_json_output
               Logger.error("Unexpected return from parse_json_output: #{inspect(other)}")
-              output_preview = if String.length(output) > 2000 do
-                String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
-              else
-                output
-              end
-              {:error, "MiniZinc failed with exit status #{exit_status}. Unexpected parse result: #{inspect(other)}. Output:\n#{output_preview}"}
+
+              output_preview =
+                if String.length(output) > 2000 do
+                  String.slice(output, 0, 2000) <> "\n... (truncated, full output in logs)"
+                else
+                  output
+                end
+
+              {:error,
+               "MiniZinc failed with exit status #{exit_status}. Unexpected parse result: #{inspect(other)}. Output:\n#{output_preview}"}
           end
 
         nil ->
@@ -267,7 +292,8 @@ defmodule MiniZincMcp.Solver do
 
   defp build_command_args(model_path, data_path, solver, solver_options) do
     args = [
-      "--solver", solver,
+      "--solver",
+      solver,
       "--json-stream",
       "--canonicalize"
     ]
@@ -308,6 +334,7 @@ defmodule MiniZincMcp.Solver do
   defp add_solver_options(args, _), do: args
 
   defp cleanup_file(nil), do: :ok
+
   defp cleanup_file(file_path) do
     try do
       if File.exists?(file_path) do
@@ -340,7 +367,9 @@ defmodule MiniZincMcp.Solver do
               %{"type" => "solution", "json" => json_solution} when is_map(json_solution) ->
                 # Direct JSON solution - preferred format
                 # Convert string keys to atoms for consistency, but keep both
-                atom_keys = json_solution |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end) |> Map.new()
+                atom_keys =
+                  json_solution |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end) |> Map.new()
+
                 string_keys = json_solution
                 merged = Map.merge(sol_acc, atom_keys) |> Map.merge(string_keys)
                 {merged, stat_acc, err_acc}
@@ -353,7 +382,7 @@ defmodule MiniZincMcp.Solver do
                 # Only parse DZN format, but passthrough all output text
                 dzn_text = extract_dzn_output(output_text)
                 output_text_str = extract_output_text_for_passthrough(output_text)
-                
+
                 if dzn_text != "" do
                   parsed = parse_dzn_output(dzn_text)
                   # Build solution map with parsed variables and DZN output
@@ -363,14 +392,19 @@ defmodule MiniZincMcp.Solver do
                     |> Map.put(:output, output_text)
                     |> Map.put(:dzn_output, dzn_text)
                     |> maybe_put_output_text(output_text_str)
+
                   {merged, stat_acc, err_acc}
                 else
                   # No DZN output available - passthrough output text without parsing
-                  Logger.warning("Solution has no DZN output format, only: #{inspect(Map.keys(output_text))}")
+                  Logger.warning(
+                    "Solution has no DZN output format, only: #{inspect(Map.keys(output_text))}"
+                  )
+
                   merged =
                     sol_acc
                     |> Map.put(:output, output_text)
                     |> maybe_put_output_text(output_text_str)
+
                   {merged, stat_acc, err_acc}
                 end
 
@@ -391,38 +425,53 @@ defmodule MiniZincMcp.Solver do
 
           {:error, decode_error} ->
             # If JSON decode fails, log and skip (don't fall back to text parsing)
-            Logger.warning("Failed to parse JSON line: #{inspect(line)} - #{inspect(decode_error)}")
+            Logger.warning(
+              "Failed to parse JSON line: #{inspect(line)} - #{inspect(decode_error)}"
+            )
+
             {sol_acc, stat_acc, err_acc}
         end
       end)
 
     # Return appropriate result
     cond do
-      error -> 
+      error ->
         Logger.error("MiniZinc error: #{inspect(error)}")
         error_msg = if is_binary(error), do: error, else: inspect(error)
         {:error, error_msg}
-      status in ["UNSATISFIABLE", "UNSAT"] -> 
+
+      status in ["UNSATISFIABLE", "UNSAT"] ->
         # UNSATISFIABLE is a valid result - the problem has no solution
         # Use string keys for JSON compatibility
         Logger.info("Problem is unsatisfiable (status: #{inspect(status)})")
         {:ok, %{"status" => status, "message" => "Problem is unsatisfiable - no solution exists"}}
-      status == "OPTIMAL_SOLUTION" or status == "SATISFIED" -> 
+
+      status == "OPTIMAL_SOLUTION" or status == "SATISFIED" ->
         if map_size(solution) > 0 do
           {:ok, solution}
         else
           # Use string keys for JSON compatibility
           {:ok, %{"status" => status}}
         end
-      map_size(solution) > 0 -> {:ok, solution}
-      status != nil -> 
+
+      map_size(solution) > 0 ->
+        {:ok, solution}
+
+      status != nil ->
         # We have a status but no solution - return it as success with status
         # Use string keys for JSON compatibility
-        Logger.info("No solution found. Status: #{inspect(status)}, Solution map: #{inspect(solution)}")
+        Logger.info(
+          "No solution found. Status: #{inspect(status)}, Solution map: #{inspect(solution)}"
+        )
+
         {:ok, %{"status" => status, "solution" => solution}}
-      true -> 
+
+      true ->
         # If we have no solution and no clear status, log warning
-        Logger.warning("No solution found and no clear status. Solution map: #{inspect(solution)}, Status: #{inspect(status)}")
+        Logger.warning(
+          "No solution found and no clear status. Solution map: #{inspect(solution)}, Status: #{inspect(status)}"
+        )
+
         {:error, "No solution found. Status: #{inspect(status)}"}
     end
   end
@@ -433,11 +482,16 @@ defmodule MiniZincMcp.Solver do
   defp extract_output_text_for_passthrough(output) when is_binary(output), do: output
   defp extract_output_text_for_passthrough(%{"default" => text}) when is_binary(text), do: text
   defp extract_output_text_for_passthrough(%{"raw" => text}) when is_binary(text), do: text
+
   defp extract_output_text_for_passthrough(output) when is_map(output) do
     # Try to get any string value from the map (prefer default, then raw)
     cond do
-      Map.has_key?(output, "default") -> output["default"]
-      Map.has_key?(output, "raw") -> output["raw"]
+      Map.has_key?(output, "default") ->
+        output["default"]
+
+      Map.has_key?(output, "raw") ->
+        output["raw"]
+
       true ->
         case Enum.find(output, fn {_, v} -> is_binary(v) end) do
           {_, text} when is_binary(text) -> text
@@ -445,10 +499,14 @@ defmodule MiniZincMcp.Solver do
         end
     end
   end
+
   defp extract_output_text_for_passthrough(_), do: nil
 
   defp maybe_put_output_text(map, nil), do: map
-  defp maybe_put_output_text(map, text) when is_binary(text) and text != "", do: Map.put(map, :output_text, text)
+
+  defp maybe_put_output_text(map, text) when is_binary(text) and text != "",
+    do: Map.put(map, :output_text, text)
+
   defp maybe_put_output_text(map, _), do: map
 
   defp parse_dzn_output(output) when is_binary(output) and output != "" do
@@ -523,35 +581,43 @@ defmodule MiniZincMcp.Solver do
         parse_set(value_str)
 
       # Boolean
-      value_str == "true" -> true
-      value_str == "false" -> false
+      value_str == "true" ->
+        true
+
+      value_str == "false" ->
+        false
 
       # Integer
-      Regex.match?(~r/^-?\d+$/, value_str) -> String.to_integer(value_str)
+      Regex.match?(~r/^-?\d+$/, value_str) ->
+        String.to_integer(value_str)
 
       # Float
-      Regex.match?(~r/^-?\d+\.\d+$/, value_str) -> String.to_float(value_str)
+      Regex.match?(~r/^-?\d+\.\d+$/, value_str) ->
+        String.to_float(value_str)
 
       # String (quoted)
       String.starts_with?(value_str, "\"") and String.ends_with?(value_str, "\"") ->
         String.slice(value_str, 1..-2)
 
       # Default: return as string
-      true -> value_str
+      true ->
+        value_str
     end
   end
 
   defp parse_multidim_array(array_str) do
     # Parse [| 1, 2 | 3, 4 |] format
     # Remove [| and |]
-    content = array_str
-    |> String.slice(2..-3)
-    |> String.trim()
+    content =
+      array_str
+      |> String.slice(2..-3)
+      |> String.trim()
 
     # Split by | to get rows
-    rows = String.split(content, "|")
-    |> Enum.map(&String.trim/1)
-    |> Enum.filter(&(&1 != ""))
+    rows =
+      String.split(content, "|")
+      |> Enum.map(&String.trim/1)
+      |> Enum.filter(&(&1 != ""))
 
     Enum.map(rows, fn row ->
       parse_array("[" <> row <> "]")
@@ -560,12 +626,15 @@ defmodule MiniZincMcp.Solver do
 
   defp parse_set(set_str) do
     # Parse {1, 2, 3} format
-    content = set_str
-    |> String.slice(1..-2)
-    |> String.trim()
+    content =
+      set_str
+      |> String.slice(1..-2)
+      |> String.trim()
 
     case content do
-      "" -> []
+      "" ->
+        []
+
       _ ->
         content
         |> String.split(",")
@@ -576,27 +645,17 @@ defmodule MiniZincMcp.Solver do
     end
   end
 
-  defp parse_value(value) do
-    value = String.trim(value)
-
-    cond do
-      value == "true" -> true
-      value == "false" -> false
-      Regex.match?(~r/^-?\d+$/, value) -> String.to_integer(value)
-      Regex.match?(~r/^-?\d+\.\d+$/, value) -> String.to_float(value)
-      Regex.match?(~r/^\[.*\]$/, value) -> parse_array(value)
-      true -> value
-    end
-  end
-
   defp parse_array(array_str) do
     # Parse [1, 2, 3] format
-    content = array_str
-    |> String.slice(1..-2)
-    |> String.trim()
+    content =
+      array_str
+      |> String.slice(1..-2)
+      |> String.trim()
 
     case content do
-      "" -> []
+      "" ->
+        []
+
       _ ->
         content
         |> String.split(",")
@@ -618,7 +677,6 @@ defmodule MiniZincMcp.Solver do
       |> List.first()
       |> String.trim()
     end)
-    |> Enum.filter(&(&1 != ""))
+    |> Enum.reject(&(&1 == ""))
   end
-
 end

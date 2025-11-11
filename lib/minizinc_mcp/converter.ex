@@ -106,7 +106,8 @@ defmodule MiniZincMcp.Converter do
 
   Extracts goal generation logic and converts it to MiniZinc constraints.
   """
-  @spec convert_multigoal(module() | String.t() | map()) :: {:ok, String.t()} | {:error, String.t()}
+  @spec convert_multigoal(module() | String.t() | map()) ::
+          {:ok, String.t()} | {:error, String.t()}
   def convert_multigoal(module) when is_atom(module) do
     case get_module_source(module) do
       {:ok, source} ->
@@ -183,7 +184,8 @@ defmodule MiniZincMcp.Converter do
   - `{:ok, solution}` - Parsed solution
   - `{:error, reason}` - Error reason
   """
-  @spec convert_and_solve(map(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
+  @spec convert_and_solve(map(), String.t() | nil, keyword()) ::
+          {:ok, map()} | {:error, String.t()}
   def convert_and_solve(domain, data_path \\ nil, opts \\ []) do
     case convert_domain(domain) do
       {:ok, minizinc_code} ->
@@ -197,14 +199,32 @@ defmodule MiniZincMcp.Converter do
   defp extract_predicates_from_domain(domain) when is_map(domain) do
     # Extract predicates from domain metadata or infer from commands/tasks
     predicates = Map.get(Map.get(domain, :metadata) || %{}, "predicates", [])
+
     if predicates == [] do
       # Try to infer from domain type
       case Map.get(domain, :domain_type) do
-        "aircraft_disassembly" -> ["activity_status", "precedence", "resource_assigned", "location_capacity"]
-        "tiny_cvrp" -> ["vehicle_at", "customer_visited", "vehicle_capacity"]
-        "neighbours" -> ["grid_value"]
-        "fox_geese_corn" -> ["boat_location", "east_fox", "east_geese", "east_corn", "west_fox", "west_geese", "west_corn"]
-        _ -> []
+        "aircraft_disassembly" ->
+          ["activity_status", "precedence", "resource_assigned", "location_capacity"]
+
+        "tiny_cvrp" ->
+          ["vehicle_at", "customer_visited", "vehicle_capacity"]
+
+        "neighbours" ->
+          ["grid_value"]
+
+        "fox_geese_corn" ->
+          [
+            "boat_location",
+            "east_fox",
+            "east_geese",
+            "east_corn",
+            "west_fox",
+            "west_geese",
+            "west_corn"
+          ]
+
+        _ ->
+          []
       end
     else
       predicates
@@ -244,12 +264,13 @@ defmodule MiniZincMcp.Converter do
     effects = extract_effects(ast)
     predicates = extract_predicates(ast)
 
-    minizinc = generate_minizinc_model(
-      command_func,
-      preconditions,
-      effects,
-      predicates
-    )
+    minizinc =
+      generate_minizinc_model(
+        command_func,
+        preconditions,
+        effects,
+        predicates
+      )
 
     {:ok, minizinc}
   end
@@ -268,11 +289,12 @@ defmodule MiniZincMcp.Converter do
     decomposition = extract_decomposition(ast)
     predicates = extract_predicates(ast)
 
-    minizinc = generate_task_minizinc(
-      task_func,
-      decomposition,
-      predicates
-    )
+    minizinc =
+      generate_task_minizinc(
+        task_func,
+        decomposition,
+        predicates
+      )
 
     {:ok, minizinc}
   end
@@ -291,11 +313,12 @@ defmodule MiniZincMcp.Converter do
     goals = extract_goals(ast)
     predicates = extract_predicates(ast)
 
-    minizinc = generate_multigoal_minizinc(
-      multigoal_func,
-      goals,
-      predicates
-    )
+    minizinc =
+      generate_multigoal_minizinc(
+        multigoal_func,
+        goals,
+        predicates
+      )
 
     {:ok, minizinc}
   end
@@ -311,13 +334,16 @@ defmodule MiniZincMcp.Converter do
     domain_name = Map.get(domain, :name, "domain") || Map.get(domain, :domain_type, "domain")
 
     # Convert actions to commands format for processing
-    all_commands = commands ++ Enum.map(actions, fn action ->
-      %{
-        "name" => Map.get(action, "name") || Map.get(action, :name),
-        "preconditions" => Map.get(action, "preconditions", []) || Map.get(action, :preconditions, []),
-        "effects" => Map.get(action, "effects", []) || Map.get(action, :effects, [])
-      }
-    end)
+    all_commands =
+      commands ++
+        Enum.map(actions, fn action ->
+          %{
+            "name" => Map.get(action, "name") || Map.get(action, :name),
+            "preconditions" =>
+              Map.get(action, "preconditions", []) || Map.get(action, :preconditions, []),
+            "effects" => Map.get(action, "effects", []) || Map.get(action, :effects, [])
+          }
+        end)
 
     # Generate variable declarations from predicates
     variable_declarations = generate_variable_declarations(predicates, entities)
@@ -380,7 +406,11 @@ defmodule MiniZincMcp.Converter do
     predicate_vars =
       predicates
       |> Enum.map(fn pred ->
-        pred_name = if is_binary(pred), do: pred, else: Map.get(pred, "name") || Map.get(pred, :name) || "unknown"
+        pred_name =
+          if is_binary(pred),
+            do: pred,
+            else: Map.get(pred, "name") || Map.get(pred, :name) || "unknown"
+
         "var bool: #{pred_name};"
       end)
       |> Enum.join("\n")
@@ -389,7 +419,11 @@ defmodule MiniZincMcp.Converter do
     entity_vars =
       entities
       |> Enum.map(fn entity ->
-        entity_name = if is_binary(entity), do: entity, else: Map.get(entity, "name") || Map.get(entity, :name) || "unknown"
+        entity_name =
+          if is_binary(entity),
+            do: entity,
+            else: Map.get(entity, "name") || Map.get(entity, :name) || "unknown"
+
         "var int: #{entity_name};"
       end)
       |> Enum.join("\n")
@@ -451,54 +485,60 @@ defmodule MiniZincMcp.Converter do
 
   defp find_command_function(ast) do
     # Find function definition starting with c_
-    {_, result} = Macro.postwalk(ast, nil, fn
-      {:def, _, [{name, _, _}, _, _], _} = node, acc ->
-        func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
-        if String.starts_with?(func_name_str, "c_") do
-          {node, name}
-        else
-          {node, acc}
-        end
+    {_, result} =
+      Macro.postwalk(ast, nil, fn
+        {:def, _, [{name, _, _}, _, _], _} = node, acc ->
+          func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
 
-      node, acc ->
-        {node, acc}
-    end)
+          if String.starts_with?(func_name_str, "c_") do
+            {node, name}
+          else
+            {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
 
     result
   end
 
   defp find_task_function(ast) do
     # Find function definition starting with t_
-    {_, result} = Macro.postwalk(ast, nil, fn
-      {:def, _, [{name, _, _}, _, _], _} = node, acc ->
-        func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
-        if String.starts_with?(func_name_str, "t_") do
-          {node, name}
-        else
-          {node, acc}
-        end
+    {_, result} =
+      Macro.postwalk(ast, nil, fn
+        {:def, _, [{name, _, _}, _, _], _} = node, acc ->
+          func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
 
-      node, acc ->
-        {node, acc}
-    end)
+          if String.starts_with?(func_name_str, "t_") do
+            {node, name}
+          else
+            {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
 
     result
   end
 
   defp find_multigoal_function(ast) do
     # Find function definition starting with m_
-    {_, result} = Macro.postwalk(ast, nil, fn
-      {:def, _, [{name, _, _}, _, _], _} = node, acc ->
-        func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
-        if String.starts_with?(func_name_str, "m_") do
-          {node, name}
-        else
-          {node, acc}
-        end
+    {_, result} =
+      Macro.postwalk(ast, nil, fn
+        {:def, _, [{name, _, _}, _, _], _} = node, acc ->
+          func_name_str = if is_atom(name), do: Atom.to_string(name), else: to_string(name)
 
-      node, acc ->
-        {node, acc}
-    end)
+          if String.starts_with?(func_name_str, "m_") do
+            {node, name}
+          else
+            {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
 
     result
   end
@@ -507,19 +547,20 @@ defmodule MiniZincMcp.Converter do
     # Extract preconditions from with/2 clauses or guard patterns
     preconditions = []
 
-    {_, preconditions} = Macro.postwalk(ast, preconditions, fn
-      {:with, _, [clauses, _]} = node, acc ->
-        # Extract conditions from with clauses
-        conditions = extract_with_conditions(clauses)
-        {node, acc ++ conditions}
+    {_, preconditions} =
+      Macro.postwalk(ast, preconditions, fn
+        {:with, _, [clauses, _]} = node, acc ->
+          # Extract conditions from with clauses
+          conditions = extract_with_conditions(clauses)
+          {node, acc ++ conditions}
 
-      {:if, _, [condition, _]} = node, acc ->
-        # Extract if conditions
-        {node, acc ++ [condition]}
+        {:if, _, [condition, _]} = node, acc ->
+          # Extract if conditions
+          {node, acc ++ [condition]}
 
-      node, acc ->
-        {node, acc}
-    end)
+        node, acc ->
+          {node, acc}
+      end)
 
     preconditions
   end
@@ -528,19 +569,20 @@ defmodule MiniZincMcp.Converter do
     # Extract effects from assignments and predicate updates
     effects = []
 
-    {_, effects} = Macro.postwalk(ast, effects, fn
-      {:=, _, [left, right]} = node, acc ->
-        # Assignment
-        {node, acc ++ [{left, right}]}
+    {_, effects} =
+      Macro.postwalk(ast, effects, fn
+        {:=, _, [left, right]} = node, acc ->
+          # Assignment
+          {node, acc ++ [{left, right}]}
 
-      {:|>, _, [arg, {:., _, [{:__aliases__, _, path}, :set]}]} = node, acc ->
-        # Predicate set operation
-        predicate_name = path |> Enum.map(&to_string/1) |> Enum.join(".")
-        {node, acc ++ [{:predicate_set, predicate_name, arg}]}
+        {:|>, _, [arg, {:., _, [{:__aliases__, _, path}, :set]}]} = node, acc ->
+          # Predicate set operation
+          predicate_name = path |> Enum.map(&to_string/1) |> Enum.join(".")
+          {node, acc ++ [{:predicate_set, predicate_name, arg}]}
 
-      node, acc ->
-        {node, acc}
-    end)
+        node, acc ->
+          {node, acc}
+      end)
 
     effects
   end
@@ -549,19 +591,21 @@ defmodule MiniZincMcp.Converter do
     # Extract predicate references from module aliases
     predicates = []
 
-    {_, predicates} = Macro.postwalk(ast, predicates, fn
-      {:alias, _, [{:__aliases__, _, path}]} = node, acc ->
-        # Check if it's a Predicate module
-        path_str = path |> Enum.map(&to_string/1) |> Enum.join(".")
-        if String.contains?(path_str, "Predicate") do
-          {node, acc ++ [path_str]}
-        else
-          {node, acc}
-        end
+    {_, predicates} =
+      Macro.postwalk(ast, predicates, fn
+        {:alias, _, [{:__aliases__, _, path}]} = node, acc ->
+          # Check if it's a Predicate module
+          path_str = path |> Enum.map(&to_string/1) |> Enum.join(".")
 
-      node, acc ->
-        {node, acc}
-    end)
+          if String.contains?(path_str, "Predicate") do
+            {node, acc ++ [path_str]}
+          else
+            {node, acc}
+          end
+
+        node, acc ->
+          {node, acc}
+      end)
 
     predicates
   end
@@ -570,14 +614,15 @@ defmodule MiniZincMcp.Converter do
     # Extract task decomposition (list of subtasks)
     decomposition = []
 
-    {_, decomposition} = Macro.postwalk(ast, decomposition, fn
-      {:list, _, elements} = node, acc ->
-        # List of subtasks
-        {node, acc ++ elements}
+    {_, decomposition} =
+      Macro.postwalk(ast, decomposition, fn
+        {:list, _, elements} = node, acc ->
+          # List of subtasks
+          {node, acc ++ elements}
 
-      node, acc ->
-        {node, acc}
-    end)
+        node, acc ->
+          {node, acc}
+      end)
 
     decomposition
   end
@@ -586,18 +631,19 @@ defmodule MiniZincMcp.Converter do
     # Extract goals from comprehension or list
     goals = []
 
-    {_, goals} = Macro.postwalk(ast, goals, fn
-      {:for, _, generators} = node, acc ->
-        # List comprehension generating goals
-        {node, acc ++ generators}
+    {_, goals} =
+      Macro.postwalk(ast, goals, fn
+        {:for, _, generators} = node, acc ->
+          # List comprehension generating goals
+          {node, acc ++ generators}
 
-      {:list, _, elements} = node, acc ->
-        # List of goals
-        {node, acc ++ elements}
+        {:list, _, elements} = node, acc ->
+          # List of goals
+          {node, acc ++ elements}
 
-      node, acc ->
-        {node, acc}
-    end)
+        node, acc ->
+          {node, acc}
+      end)
 
     goals
   end
@@ -683,11 +729,12 @@ defmodule MiniZincMcp.Converter do
   end
 
   defp generate_multigoal_minizinc_from_map(name, predicate) do
-    goal_constraint = if predicate do
-      "constraint #{predicate} = true;"
-    else
-      "% Goal: #{name}"
-    end
+    goal_constraint =
+      if predicate do
+        "constraint #{predicate} = true;"
+      else
+        "% Goal: #{name}"
+      end
 
     """
     % Multigoal: #{name}
@@ -937,7 +984,9 @@ defmodule MiniZincMcp.Converter do
   defp format_function_name(other), do: inspect(other)
 
   defp format_preconditions([]), do: "% (none)"
-  defp format_preconditions(preconditions), do: Enum.map_join(preconditions, "\n", &format_constraint/1)
+
+  defp format_preconditions(preconditions),
+    do: Enum.map_join(preconditions, "\n", &format_constraint/1)
 
   defp format_effects([]), do: "% (none)"
   defp format_effects(effects), do: Enum.map_join(effects, "\n", &format_effect/1)
@@ -952,19 +1001,23 @@ defmodule MiniZincMcp.Converter do
   defp format_goals(goals), do: inspect(goals)
 
   defp format_preconditions_from_strings([]), do: "% (none)"
+
   defp format_preconditions_from_strings(preconditions) when is_list(preconditions) do
     Enum.map_join(preconditions, "\n", fn prec ->
       "%   - #{prec}"
     end)
   end
+
   defp format_preconditions_from_strings(_), do: "% (none)"
 
   defp format_effects_from_strings([]), do: "% (none)"
+
   defp format_effects_from_strings(effects) when is_list(effects) do
     Enum.map_join(effects, "\n", fn effect ->
       "%   - #{effect}"
     end)
   end
+
   defp format_effects_from_strings(_), do: "% (none)"
 
   defp format_constraint(constraint) do

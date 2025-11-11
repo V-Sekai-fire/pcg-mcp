@@ -2,7 +2,25 @@
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
 defmodule MiniZincMcp.Application do
-  @moduledoc false
+  @moduledoc """
+  Application supervisor for MiniZinc MCP Server.
+
+  Manages the lifecycle of the MCP server, selecting the appropriate transport
+  (HTTP or STDIO) based on environment configuration.
+
+  ## Transport Selection
+
+  The application selects the transport based on:
+  1. `MCP_TRANSPORT` environment variable (if set)
+  2. `PORT` environment variable (if set, uses HTTP)
+  3. Defaults to STDIO transport
+
+  ## Supervisor Strategy
+
+  Uses `:one_for_one` restart strategy with a maximum of 10 restarts within
+  60 seconds. If this limit is exceeded, the supervisor terminates, which is
+  standard Erlang "let it crash" behavior.
+  """
 
   use Application
 
@@ -51,14 +69,22 @@ defmodule MiniZincMcp.Application do
       max_restarts: 10,
       max_seconds: 60
     ]
+
     Supervisor.start_link(children, opts)
   end
 
   defp get_port do
     case System.get_env("PORT") do
-      nil -> 8081
-      port_str -> String.to_integer(port_str)
+      nil ->
+        8081
+
+      port_str ->
+        String.to_integer(port_str)
     end
+  rescue
+    ArgumentError ->
+      # Invalid port string, default to 8081
+      8081
   end
 
   defp get_host do
