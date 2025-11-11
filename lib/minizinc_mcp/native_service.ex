@@ -98,8 +98,7 @@ defmodule MiniZincMcp.NativeService do
         },
         timeout: %{
           type: "integer",
-          description: "Timeout in milliseconds (default: 60000)",
-          default: 60_000
+          description: "Optional timeout in milliseconds (default: no timeout, runs indefinitely)"
         },
         auto_include_stdlib: %{
           type: "boolean",
@@ -157,7 +156,7 @@ defmodule MiniZincMcp.NativeService do
     data_content = Map.get(args, "data_content")
     # Only allow chuffed solver (ignore user input)
     solver = "chuffed"
-    timeout = Map.get(args, "timeout", 60_000)
+    timeout = Map.get(args, "timeout", :infinity)
     auto_include_stdlib = Map.get(args, "auto_include_stdlib", true)
 
     opts = [solver: solver, timeout: timeout, auto_include_stdlib: auto_include_stdlib]

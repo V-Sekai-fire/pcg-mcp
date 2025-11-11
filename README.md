@@ -80,7 +80,7 @@ Solve a MiniZinc model using the chuffed solver (fixed, not configurable).
 - `model_path` (string, required if `model_content` not provided): Path to .mzn MiniZinc model file
 - `data_content` (string, optional): DZN data content as string (e.g., `"n = 8;"`). Must be valid DZN format. Parsed and included in response as `input_data` field.
 - `data_path` (string, optional): Path to .dzn data file (alternative to `data_content`)
-- `timeout` (integer, optional): Timeout in milliseconds (default: 60000)
+- `timeout` (integer, optional): Optional timeout in milliseconds (default: no timeout, runs indefinitely)
 - `auto_include_stdlib` (boolean, optional): Automatically include standard MiniZinc libraries (e.g., `alldifferent.mzn`) if not present (default: `true`)
 
 #### Standard Library Support

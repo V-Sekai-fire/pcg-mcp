@@ -38,7 +38,7 @@ defmodule MiniZincMcp.Solver do
   - `model_path`: Path to .mzn MiniZinc model file
   - `data_path`: Optional path to .dzn data file
   - `opts`: Options keyword list
-    - `:timeout` - Timeout in milliseconds (default: 60000)
+    - `:timeout` - Optional timeout in milliseconds (default: :infinity, no timeout)
     - `:solver_options` - Additional solver options
 
   Note: Only chuffed solver is supported.
@@ -57,7 +57,7 @@ defmodule MiniZincMcp.Solver do
   def solve(model_path, data_path \\ nil, opts \\ []) do
     # Only support chuffed solver
     solver = "chuffed"
-    timeout = Keyword.get(opts, :timeout, 60_000)
+    timeout = Keyword.get(opts, :timeout, :infinity)
     solver_options = Keyword.get(opts, :solver_options, [])
 
     if File.exists?(model_path) do
@@ -280,7 +280,11 @@ defmodule MiniZincMcp.Solver do
           end
 
         nil ->
-          {:error, "MiniZinc execution timed out after #{timeout}ms"}
+          if timeout == :infinity do
+            {:error, "MiniZinc execution was interrupted"}
+          else
+            {:error, "MiniZinc execution timed out after #{timeout}ms"}
+          end
 
         {:exit, reason} ->
           {:error, "MiniZinc process exited: #{inspect(reason)}"}
