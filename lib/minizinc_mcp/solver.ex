@@ -12,20 +12,21 @@ defmodule MiniZincMcp.Solver do
   require Logger
 
   @doc """
-  Solves a MiniZinc model file using the minizinc command-line tool.
+  Solves a MiniZinc model file using the minizinc command-line tool with chuffed solver.
 
   ## Parameters
 
   - `model_path`: Path to .mzn MiniZinc model file
   - `data_path`: Optional path to .dzn data file
   - `opts`: Options keyword list
-    - `:solver` - Solver name (default: "chuffed")
     - `:timeout` - Timeout in milliseconds (default: 60000)
     - `:solver_options` - Additional solver options
 
+  Note: Only chuffed solver is supported.
+
   ## Returns
 
-  - `{:ok, solution}` - Parsed solution as map
+  - `{:ok, solution}` - Parsed solution as map with DZN format
   - `{:error, reason}` - Error reason
   """
   @spec solve(String.t(), String.t() | nil, keyword()) :: {:ok, map()} | {:error, String.t()}
@@ -35,10 +36,10 @@ defmodule MiniZincMcp.Solver do
     timeout = Keyword.get(opts, :timeout, 60_000)
     solver_options = Keyword.get(opts, :solver_options, [])
 
-    if not File.exists?(model_path) do
-      {:error, "MiniZinc model file not found: #{model_path}"}
-    else
+    if File.exists?(model_path) do
       build_and_run_command(model_path, data_path, solver, timeout, solver_options)
+    else
+      {:error, "MiniZinc model file not found: #{model_path}"}
     end
   end
 
@@ -257,7 +258,7 @@ defmodule MiniZincMcp.Solver do
                     |> Map.put(:dzn_output, dzn_text)
                   {merged, stat_acc, err_acc}
                 else
-                  # No DZN output available - return error or empty solution
+                  # No DZN output available - log warning and skip
                   Logger.warning("Solution has no DZN output format, only: #{inspect(Map.keys(output_text))}")
                   {sol_acc, stat_acc, err_acc}
                 end
@@ -306,10 +307,10 @@ defmodule MiniZincMcp.Solver do
     # - Sets: set = {1, 2, 3};
     # - Comments: % comment
     # - Multi-line values
-    
+
     # Remove comments and split into statements
     statements = extract_dzn_statements(output)
-    
+
     Enum.reduce(statements, %{}, fn statement, acc ->
       case parse_dzn_statement(statement) do
         {var_name, value} -> Map.put(acc, var_name, value)
@@ -327,9 +328,9 @@ defmodule MiniZincMcp.Solver do
     output
     |> String.split(";")
     |> Enum.map(&String.trim/1)
-    |> Enum.filter(&(&1 != ""))
+    |> Enum.reject(&(&1 == ""))
     |> Enum.map(&remove_comment/1)
-    |> Enum.filter(&(&1 != ""))
+    |> Enum.reject(&(&1 == ""))
   end
 
   defp remove_comment(line) do
@@ -354,7 +355,7 @@ defmodule MiniZincMcp.Solver do
 
   defp parse_dzn_value(value_str) do
     value_str = String.trim(value_str)
-    
+
     cond do
       # Multi-dimensional array: [| ... |]
       String.starts_with?(value_str, "[|") and String.ends_with?(value_str, "|]") ->
@@ -410,15 +411,15 @@ defmodule MiniZincMcp.Solver do
     |> String.slice(1..-2)
     |> String.trim()
 
-    if content == "" do
-      []
-    else
-      content
-      |> String.split(",")
-      |> Enum.map(&String.trim/1)
-      |> Enum.map(&parse_dzn_value/1)
-      |> Enum.uniq()
-      |> Enum.sort()
+    case content do
+      "" -> []
+      _ ->
+        content
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.map(&parse_dzn_value/1)
+        |> Enum.uniq()
+        |> Enum.sort()
     end
   end
 
@@ -441,19 +442,14 @@ defmodule MiniZincMcp.Solver do
     |> String.slice(1..-2)
     |> String.trim()
 
-    if content == "" do
-      []
-    else
-      content
-      |> String.split(",")
-      |> Enum.map(&String.trim/1)
-      |> Enum.map(&parse_dzn_value/1)
+    case content do
+      "" -> []
+      _ ->
+        content
+        |> String.split(",")
+        |> Enum.map(&String.trim/1)
+        |> Enum.map(&parse_dzn_value/1)
     end
-  end
-
-  # Legacy parse_value for backward compatibility (now calls parse_dzn_value)
-  defp parse_value(value) do
-    parse_dzn_value(value)
   end
 
   defp parse_solver_list(output) do

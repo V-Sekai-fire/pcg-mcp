@@ -7,9 +7,12 @@ defmodule MiniZincMcp.NativeService do
   Provides MiniZinc constraint programming tools via MCP protocol.
 
   This server provides tools for:
-  - Solving MiniZinc models
+  - Solving MiniZinc models (using chuffed solver only)
   - Listing available solvers
   - Checking MiniZinc availability
+
+  Supports both MZN (model) and DZN (data) content as strings.
+  Output is parsed from DZN format only.
   """
 
   # Suppress warnings from ex_mcp DSL generated code
@@ -160,9 +163,8 @@ defmodule MiniZincMcp.NativeService do
     model_content = args["model_content"]
     data_path = args["data_path"]
     data_content = args["data_content"]
-    solver_input = Map.get(args, "solver", "chuffed")
-    # Only allow chuffed solver
-    solver = if solver_input == "chuffed", do: "chuffed", else: "chuffed"
+    # Only allow chuffed solver (ignore user input)
+    solver = "chuffed"
     timeout = Map.get(args, "timeout", 60_000)
 
     opts = [solver: solver, timeout: timeout]
