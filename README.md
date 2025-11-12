@@ -2,6 +2,18 @@
 
 A Model Context Protocol (MCP) server that provides Wave Function Collapse (WFC) for procedural content generation.
 
+> **⚠️ Status: Early Development / Not Production Ready**
+> 
+> This project is in active development and has several known limitations:
+> 
+> - **Image Processing**: Image loading requires optional dependencies (`nx_image`, `nx`) and is not available by default. Color quantization is simplified and may not work well with complex images.
+> - **Error Handling**: Error handling and extraction from MiniZinc output could be improved. Some edge cases in DZN parsing are not fully handled.
+> - **WFC Limitations**: No backtracking support - contradictions cause errors rather than automatic recovery. State serialization validation is missing.
+> - **Build Issues**: Docker build includes a workaround for `gen_state_machine` OTP 26 compatibility issues.
+> - **Testing**: While all tests pass, the codebase has type warnings from dependencies and needs more comprehensive edge case testing.
+> 
+> **Use at your own risk.** This is experimental software suitable for development and testing purposes only.
+
 ## Features
 
 - **Wave Function Collapse (WFC)** - Procedural level generation algorithm
