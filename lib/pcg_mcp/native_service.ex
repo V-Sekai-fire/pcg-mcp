@@ -3,11 +3,12 @@
 
 defmodule PcgMcp.NativeService do
   @moduledoc """
-  Native BEAM service for MiniZinc MCP using ex_mcp library.
-  Provides MiniZinc constraint programming tools via MCP protocol.
+  Native BEAM service for PCG MCP using ex_mcp library.
+  Provides Wave Function Collapse (WFC) tools for procedural content generation via MCP protocol.
 
   This server provides tools for:
-  - Solving MiniZinc models (using chuffed solver only)
+  - Wave Function Collapse (WFC) for procedural content generation (primary)
+  - MiniZinc constraint programming (advanced/utility)
 
   ## Input Format
 
@@ -28,7 +29,7 @@ defmodule PcgMcp.NativeService do
   @compile {:no_warn_undefined, :no_warn_pattern}
 
   use ExMCP.Server,
-    name: "MiniZinc MCP Server",
+    name: "PCG MCP Server",
     version: "1.0.0"
 
   alias PcgMcp.Solver
@@ -58,7 +59,8 @@ defmodule PcgMcp.NativeService do
     GenServer.start_link(__MODULE__, opts, genserver_opts)
   end
 
-  # Define MiniZinc tools using ex_mcp DSL
+  # Define tools using ex_mcp DSL
+  # WFC tools are primary, MiniZinc tools are available for advanced use
 
   deftool "minizinc_solve" do
     meta do
@@ -272,16 +274,44 @@ defmodule PcgMcp.NativeService do
     })
   end
 
+  deftool "wfc_get_output" do
+    meta do
+      name("Get Wave Function Collapse Output")
+
+      description("""
+      Extract the final output grid from a WFC state as a 2D array of tile IDs.
+      Returns the generated level pattern ready for rendering or further processing.
+      """)
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        state: %{
+          type: "object",
+          description: "WFC state (from init, tick, or run)"
+        }
+      },
+      required: ["state"]
+    })
+
+    tool_annotations(%{
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true
+    })
+  end
+
   # Initialize handler
   @impl true
   def handle_initialize(params, state) do
     {:ok,
      %{
        protocolVersion: Map.get(params, "protocolVersion", "2025-06-18"),
-       serverInfo: %{
-         name: "MiniZinc MCP Server",
-         version: "1.0.0"
-       },
+      serverInfo: %{
+        name: "PCG MCP Server",
+        version: "1.0.0"
+      },
        capabilities: %{
          tools: %{},
          resources: %{},
@@ -308,6 +338,9 @@ defmodule PcgMcp.NativeService do
 
       "wfc_run" ->
         handle_wfc_run(args, state)
+
+      "wfc_get_output" ->
+        handle_wfc_get_output(args, state)
 
       _ ->
         {:error, "Tool not found: #{tool_name}", state}
@@ -605,6 +638,51 @@ defmodule PcgMcp.NativeService do
       catch
         kind, reason ->
           error_msg = "WFC run error (#{inspect(kind)}): #{inspect(reason)}"
+          {:error, error_msg, state}
+      end
+    else
+      {:error, "state must be provided", state}
+    end
+  end
+
+  defp handle_wfc_get_output(args, state) do
+    args = if is_map(args), do: args, else: %{}
+    
+    wfc_state_map = Map.get(args, "state")
+    
+    if wfc_state_map do
+      try do
+        alias PcgMcp.WaveFunctionCollapse
+        
+        # Convert map back to WFC state struct
+        wfc_state = map_to_wfc_state(wfc_state_map)
+        
+        # Get output grid
+        output = WaveFunctionCollapse.get_output(wfc_state)
+        
+        result = %{
+          "output" => output,
+          "width" => wfc_state.width,
+          "height" => wfc_state.height
+        }
+        
+        case Jason.encode(result) do
+          {:ok, result_json} ->
+            content_item = %{"type" => "text", "text" => result_json}
+            response = %{"content" => [content_item]}
+            {:ok, response, state}
+            
+          {:error, encode_error} ->
+            error_msg = "Failed to encode WFC output to JSON: #{inspect(encode_error)}"
+            {:error, error_msg, state}
+        end
+      rescue
+        e ->
+          error_msg = "WFC get_output error: #{inspect(e)}"
+          {:error, error_msg, state}
+      catch
+        kind, reason ->
+          error_msg = "WFC get_output error (#{inspect(kind)}): #{inspect(reason)}"
           {:error, error_msg, state}
       end
     else
