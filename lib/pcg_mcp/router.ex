@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.Router do
+defmodule PcgMcp.Router do
   @moduledoc """
   Router for MiniZinc MCP HTTP server.
   Adds health check endpoint and forwards MCP requests to ExMCP.HttpPlug.
@@ -19,9 +19,9 @@ defmodule MiniZincMcp.Router do
 
   # Forward all other requests to HttpPlugWrapper (which fixes SSE fallback)
   forward("/",
-    to: MiniZincMcp.HttpPlugWrapper,
+    to: PcgMcp.HttpPlugWrapper,
     init_opts: [
-      handler: MiniZincMcp.NativeService,
+      handler: PcgMcp.NativeService,
       server_info: %{
         name: "MiniZinc MCP Server",
         version: "1.0.0"

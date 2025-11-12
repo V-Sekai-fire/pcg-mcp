@@ -5,7 +5,7 @@ defmodule ValidateTest do
   Tests for MiniZinc model validation functionality.
   """
 
-  alias MiniZincMcp.Solver
+  alias PcgMcp.Solver
 
   test "validate a valid model" do
     model = """

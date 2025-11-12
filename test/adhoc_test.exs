@@ -14,7 +14,7 @@ defmodule AdhocTest do
     solve satisfy;
     """
 
-    case MiniZincMcp.Solver.solve_string(model) do
+    case PcgMcp.Solver.solve_string(model) do
       {:ok, result} ->
         IO.puts("\n✅ Test passed! Solution found:")
         IO.inspect(result, label: "Result")
@@ -78,7 +78,7 @@ defmodule AdhocTest do
     solve minimize x;
     """
 
-    case MiniZincMcp.Solver.solve_string(model) do
+    case PcgMcp.Solver.solve_string(model) do
       {:ok, result} ->
         IO.puts("\n✅ Optimization test passed! Solution found:")
         IO.inspect(result, label: "Result")

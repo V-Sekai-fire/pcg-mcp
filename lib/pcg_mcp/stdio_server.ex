@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.StdioServer do
+defmodule PcgMcp.StdioServer do
   @moduledoc """
   Stdio-based MCP server that reads JSON-RPC messages from stdin and writes responses to stdout.
   """
@@ -22,6 +22,6 @@ defmodule MiniZincMcp.StdioServer do
   @spec start_link(term()) :: {:ok, pid()}
   def start_link(opts) do
     # Start the NativeService with stdio transport
-    MiniZincMcp.NativeService.start_link(opts ++ [transport: :stdio])
+    PcgMcp.NativeService.start_link(opts ++ [transport: :stdio])
   end
 end

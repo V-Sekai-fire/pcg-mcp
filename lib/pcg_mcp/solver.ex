@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.Solver do
+defmodule PcgMcp.Solver do
   @moduledoc """
   MiniZinc solver using System.cmd to call minizinc command-line tool with JSON output.
 
   This solver uses the standard MiniZinc command-line interface and parses JSON output.
-  No NIFs are required - everything is done via external process communication.
+  MiniZinc is installed in the Docker container (see Dockerfile) or must be available locally.
 
   ## Standard Library Preamble
 
@@ -29,6 +29,7 @@ defmodule MiniZincMcp.Solver do
   """
 
   require Logger
+
 
   @doc """
   Solves a MiniZinc model file using the minizinc command-line tool with chuffed solver.
@@ -844,6 +845,11 @@ defmodule MiniZincMcp.Solver do
 
   defp build_location_string(_), do: ""
 
+  # TODO: Improve error handling and extraction:
+  #       - Better parsing of MiniZinc error formats
+  #       - Extract more context (code snippets, variable names)
+  #       - Handle multiple errors in single output
+  #       - Provide structured error objects with location, type, message
   defp extract_error_from_raw_output(output) when is_binary(output) do
     # Without --json-stream, MiniZinc outputs plain text errors, not JSON
     # Format: /path/to/file.mzn:line.column:\ncode\n^\nError: message
@@ -980,6 +986,11 @@ defmodule MiniZincMcp.Solver do
 
   defp maybe_put_output_text(map, _), do: map
 
+  # TODO: Improve DZN parsing to handle edge cases:
+  #       - Nested structures (arrays of arrays, sets of sets)
+  #       - String values with special characters
+  #       - Enum types and more complex MiniZinc types
+  #       - Better error handling for malformed DZN
   defp parse_dzn_output(output) when is_binary(output) and output != "" do
     # Parse complete DZN format
     # Supports:

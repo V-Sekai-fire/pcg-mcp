@@ -1,4 +1,4 @@
-# MiniZinc MCP Server
+# PCG MCP Server
 
 A Model Context Protocol (MCP) server that provides MiniZinc constraint programming capabilities.
 
@@ -25,7 +25,7 @@ A Model Context Protocol (MCP) server that provides MiniZinc constraint programm
 
 ```bash
 git clone <repository-url>
-cd minizinc-mcp
+cd pcg-mcp
 mix deps.get
 mix compile
 ```
@@ -43,7 +43,7 @@ mix mcp.server
 Or using release:
 
 ```bash
-./_build/prod/rel/minizinc_mcp/bin/minizinc_mcp start
+./_build/prod/rel/pcg_mcp/bin/pcg_mcp start
 ```
 
 ### HTTP Transport
@@ -51,7 +51,7 @@ Or using release:
 For web deployments (e.g., Smithery):
 
 ```bash
-PORT=8081 MIX_ENV=prod ./_build/prod/rel/minizinc_mcp/bin/minizinc_mcp start
+PORT=8081 MIX_ENV=prod ./_build/prod/rel/pcg_mcp/bin/pcg_mcp start
 ```
 
 **Endpoints:**

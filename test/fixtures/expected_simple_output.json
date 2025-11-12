@@ -1,0 +1,6 @@
+{
+  "description": "Expected output for simple 4x4 pattern with 8x8 output",
+  "min_patterns": 4,
+  "expected_tiles": [0, 1]
+}
+

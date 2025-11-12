@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.Converter do
+defmodule PcgMcp.Converter do
   @moduledoc """
   Converts planner elements (actions, tasks, commands, multigoals) to MiniZinc format
   using Elixir's Code module to parse and transform Elixir AST.
@@ -189,7 +189,7 @@ defmodule MiniZincMcp.Converter do
   def convert_and_solve(domain, data_path \\ nil, opts \\ []) do
     case convert_domain(domain) do
       {:ok, minizinc_code} ->
-        MiniZincMcp.Solver.solve_string(minizinc_code, data_path, opts)
+        PcgMcp.Solver.solve_string(minizinc_code, data_path, opts)
 
       error ->
         error

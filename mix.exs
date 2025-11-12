@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.MixProject do
+defmodule PcgMcp.MixProject do
   use Mix.Project
 
   def project do
     [
-      app: :minizinc_mcp,
+      app: :pcg_mcp,
       version: "1.0.0-dev2",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
@@ -18,11 +18,11 @@ defmodule MiniZincMcp.MixProject do
       test_coverage: [
         summary: [threshold: 70],
         ignore_modules: [
-          MiniZincMcp.NativeService,
+          PcgMcp.NativeService,
           Mix.Tasks.Mcp.Server,
-          MiniZincMcp.HttpPlugWrapper,
-          MiniZincMcp.HttpServer,
-          MiniZincMcp.Router
+          PcgMcp.HttpPlugWrapper,
+          PcgMcp.HttpServer,
+          PcgMcp.Router
         ]
       ]
     ]
@@ -31,7 +31,7 @@ defmodule MiniZincMcp.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {MiniZincMcp.Application, []},
+      mod: {PcgMcp.Application, []},
       applications: [:logger, :ex_mcp, :jason, :plug_cowboy, :briefly]
     ]
   end
@@ -43,6 +43,7 @@ defmodule MiniZincMcp.MixProject do
       {:jason, "~> 1.4"},
       {:plug_cowboy, "~> 2.7"},
       {:briefly, "~> 0.4"},
+      {:nx_image, "~> 0.1.2"},
       {:dialyxir, "~> 1.4.6", only: [:dev], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
@@ -51,9 +52,9 @@ defmodule MiniZincMcp.MixProject do
   # Release configuration
   defp releases do
     [
-      minizinc_mcp: [
+      pcg_mcp: [
         include_executables_for: [:unix],
-        applications: [minizinc_mcp: :permanent]
+        applications: [pcg_mcp: :permanent]
       ]
     ]
   end

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.HttpServer do
+defmodule PcgMcp.HttpServer do
   @moduledoc """
   HTTP server for MiniZinc MCP using ExMCP.HttpPlug.
   Provides HTTP transport for MCP protocol with CORS support.
@@ -28,7 +28,7 @@ defmodule MiniZincMcp.HttpServer do
     Logger.info("Starting MiniZinc MCP HTTP server on #{host}:#{port}")
 
     # Use Router which adds health check endpoint and forwards to ExMCP.HttpPlug
-    case Plug.Cowboy.http(MiniZincMcp.Router, [], port: port, ip: parse_host(host)) do
+    case Plug.Cowboy.http(PcgMcp.Router, [], port: port, ip: parse_host(host)) do
       {:ok, pid} ->
         Logger.info("MiniZinc MCP HTTP server started successfully on port #{port}")
         {:ok, pid}

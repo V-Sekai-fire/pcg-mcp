@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Mcp.Server do
     Mix.Task.run("app.start")
 
     # Start the MCP application
-    Application.ensure_all_started(:minizinc_mcp)
+    Application.ensure_all_started(:pcg_mcp)
 
     # Keep the process running
     Process.sleep(:infinity)

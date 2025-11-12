@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.Application do
+defmodule PcgMcp.Application do
   @moduledoc """
   Application supervisor for MiniZinc MCP Server.
 
@@ -41,15 +41,15 @@ defmodule MiniZincMcp.Application do
           # Our override ensures they start without names to avoid conflicts
           # HttpServer has :permanent restart in its child_spec
           [
-            {MiniZincMcp.HttpServer, [port: port, host: host]}
+            {PcgMcp.HttpServer, [port: port, host: host]}
           ]
 
         :stdio ->
           # For stdio transport, start NativeService as supervisor child
           # Both children have :permanent restart in their child_spec, so supervisor will restart them if they crash
           [
-            {MiniZincMcp.NativeService, [name: MiniZincMcp.NativeService]},
-            {MiniZincMcp.StdioServer, []}
+            {PcgMcp.NativeService, [name: PcgMcp.NativeService]},
+            {PcgMcp.StdioServer, []}
           ]
       end
 
@@ -65,7 +65,7 @@ defmodule MiniZincMcp.Application do
     # In production, use a process manager (systemd, Docker restart, etc.) to restart the app.
     opts = [
       strategy: :one_for_one,
-      name: MiniZincMcp.Supervisor,
+      name: PcgMcp.Supervisor,
       max_restarts: 10,
       max_seconds: 60
     ]

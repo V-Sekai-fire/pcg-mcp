@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.HttpPlugWrapper do
+defmodule PcgMcp.HttpPlugWrapper do
   @moduledoc """
   Wrapper around ExMCP.HttpPlug that fixes SSE session ID mismatch bug.
   When a session ID is provided in SSE connection but doesn't exist, ExMCP creates a new one.

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025-present K. S. Ernest (iFire) Lee
 
-defmodule MiniZincMcp.NativeService do
+defmodule PcgMcp.NativeService do
   @moduledoc """
   Native BEAM service for MiniZinc MCP using ex_mcp library.
   Provides MiniZinc constraint programming tools via MCP protocol.
@@ -31,7 +31,7 @@ defmodule MiniZincMcp.NativeService do
     name: "MiniZinc MCP Server",
     version: "1.0.0"
 
-  alias MiniZincMcp.Solver
+  alias PcgMcp.Solver
 
   @spec child_spec(term()) :: Supervisor.child_spec()
   def child_spec(opts) do
@@ -150,6 +150,128 @@ defmodule MiniZincMcp.NativeService do
     })
   end
 
+  deftool "wfc_init" do
+    meta do
+      name("Initialize Wave Function Collapse")
+
+      description("""
+      Initialize a Wave Function Collapse generator from a sample pattern.
+      Each tick of WFC uses MiniZinc to solve which cell to collapse and what tile to assign.
+      """)
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        sample: %{
+          oneOf: [
+            %{
+              type: "array",
+              items: %{
+                type: "array",
+                items: %{type: "integer"}
+              },
+              description: "2D array of tile IDs representing the input sample pattern"
+            },
+            %{
+              type: "string",
+              description: "Path to image file to use as sample (requires nx_image)"
+            }
+          ],
+          description: "Either a 2D array of tile IDs or a path to an image file"
+        },
+        pattern_size: %{
+          type: "integer",
+          description: "Size of patterns to extract (default: 3)",
+          default: 3
+        },
+        output_width: %{
+          type: "integer",
+          description: "Width of output grid"
+        },
+        output_height: %{
+          type: "integer",
+          description: "Height of output grid"
+        },
+        tile_size: %{
+          type: "integer",
+          description: "Size of each tile in pixels when loading from image (default: 1)",
+          default: 1
+        }
+      },
+      required: ["sample", "output_width", "output_height"]
+    })
+
+    tool_annotations(%{
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false
+    })
+  end
+
+  deftool "wfc_tick" do
+    meta do
+      name("Wave Function Collapse Tick")
+
+      description("""
+      Perform one tick of Wave Function Collapse.
+      Uses MiniZinc to find the cell with lowest entropy and determine which tile to collapse it to.
+      Returns the updated state and whether generation is complete.
+      """)
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        state: %{
+          type: "object",
+          description: "WFC state from previous init or tick"
+        }
+      },
+      required: ["state"]
+    })
+
+    tool_annotations(%{
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false
+    })
+  end
+
+  deftool "wfc_run" do
+    meta do
+      name("Run Wave Function Collapse to Completion")
+
+      description("""
+      Run Wave Function Collapse until completion or contradiction.
+      Each tick uses MiniZinc to solve which cell to collapse.
+      Returns the final state and history of all intermediate states.
+      """)
+    end
+
+    input_schema(%{
+      type: "object",
+      properties: %{
+        state: %{
+          type: "object",
+          description: "WFC state from init"
+        },
+        max_iterations: %{
+          type: "integer",
+          description: "Maximum number of iterations (default: 1000)",
+          default: 1000
+        }
+      },
+      required: ["state"]
+    })
+
+    tool_annotations(%{
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false
+    })
+  end
+
   # Initialize handler
   @impl true
   def handle_initialize(params, state) do
@@ -177,6 +299,15 @@ defmodule MiniZincMcp.NativeService do
 
       "minizinc_validate" ->
         handle_validate(args, state)
+
+      "wfc_init" ->
+        handle_wfc_init(args, state)
+
+      "wfc_tick" ->
+        handle_wfc_tick(args, state)
+
+      "wfc_run" ->
+        handle_wfc_run(args, state)
 
       _ ->
         {:error, "Tool not found: #{tool_name}", state}
@@ -322,6 +453,253 @@ defmodule MiniZincMcp.NativeService do
     end
   end
 
+  defp handle_wfc_init(args, state) do
+    args = if is_map(args), do: args, else: %{}
+    
+    sample = Map.get(args, "sample")
+    pattern_size = Map.get(args, "pattern_size", 3)
+    output_width = Map.get(args, "output_width")
+    output_height = Map.get(args, "output_height")
+    tile_size = Map.get(args, "tile_size", 1)
+    
+    if sample && output_width && output_height do
+      try do
+        alias PcgMcp.WaveFunctionCollapse
+        
+        # If sample is a string (image path), load it first
+        processed_sample = if is_binary(sample) do
+          case WaveFunctionCollapse.load_image(sample, tile_size) do
+            {:ok, image_sample} -> image_sample
+            {:error, reason} -> {:error, reason}
+          end
+        else
+          sample
+        end
+        
+        case processed_sample do
+          {:error, reason} ->
+            error_msg = if is_binary(reason), do: reason, else: to_string(reason)
+            {:error, error_msg, state}
+            
+          _ ->
+            case WaveFunctionCollapse.init(processed_sample, pattern_size, output_width, output_height) do
+              {:ok, wfc_state} ->
+                state_map = normalize_for_json(wfc_state)
+                
+                case Jason.encode(state_map) do
+                  {:ok, state_json} ->
+                    content_item = %{"type" => "text", "text" => state_json}
+                    response = %{"content" => [content_item]}
+                    {:ok, response, state}
+                    
+                  {:error, encode_error} ->
+                    error_msg = "Failed to encode WFC state to JSON: #{inspect(encode_error)}"
+                    {:error, error_msg, state}
+                end
+                
+              {:error, reason} ->
+                error_msg = if is_binary(reason), do: reason, else: to_string(reason)
+                {:error, error_msg, state}
+            end
+        end
+      rescue
+        e ->
+          error_msg = "WFC init error: #{inspect(e)}"
+          {:error, error_msg, state}
+      catch
+        kind, reason ->
+          error_msg = "WFC init error (#{inspect(kind)}): #{inspect(reason)}"
+          {:error, error_msg, state}
+      end
+    else
+      {:error, "sample, output_width, and output_height must be provided", state}
+    end
+  end
+
+  defp handle_wfc_tick(args, state) do
+    args = if is_map(args), do: args, else: %{}
+    
+    wfc_state_map = Map.get(args, "state")
+    
+    if wfc_state_map do
+      try do
+        alias PcgMcp.WaveFunctionCollapse
+        
+        # Convert map back to WFC state struct
+        wfc_state = map_to_wfc_state(wfc_state_map)
+        
+        case WaveFunctionCollapse.tick(wfc_state) do
+          {:ok, new_state, complete} ->
+            state_map = normalize_for_json(new_state)
+            result = Map.put(state_map, "complete", complete)
+            
+            case Jason.encode(result) do
+              {:ok, result_json} ->
+                content_item = %{"type" => "text", "text" => result_json}
+                response = %{"content" => [content_item]}
+                {:ok, response, state}
+                
+              {:error, encode_error} ->
+                error_msg = "Failed to encode WFC result to JSON: #{inspect(encode_error)}"
+                {:error, error_msg, state}
+            end
+            
+          {:error, reason} ->
+            error_msg = if is_binary(reason), do: reason, else: to_string(reason)
+            {:error, error_msg, state}
+        end
+      rescue
+        e ->
+          error_msg = "WFC tick error: #{inspect(e)}"
+          {:error, error_msg, state}
+      catch
+        kind, reason ->
+          error_msg = "WFC tick error (#{inspect(kind)}): #{inspect(reason)}"
+          {:error, error_msg, state}
+      end
+    else
+      {:error, "state must be provided", state}
+    end
+  end
+
+  defp handle_wfc_run(args, state) do
+    args = if is_map(args), do: args, else: %{}
+    
+    wfc_state_map = Map.get(args, "state")
+    max_iterations = Map.get(args, "max_iterations", 1000)
+    
+    if wfc_state_map do
+      try do
+        alias PcgMcp.WaveFunctionCollapse
+        
+        # Convert map back to WFC state struct
+        wfc_state = map_to_wfc_state(wfc_state_map)
+        
+        case WaveFunctionCollapse.run(wfc_state, max_iterations) do
+          {:ok, final_state, history} ->
+            result = %{
+              "final_state" => normalize_for_json(final_state),
+              "history" => Enum.map(history, &normalize_for_json/1),
+              "iterations" => length(history)
+            }
+            
+            case Jason.encode(result) do
+              {:ok, result_json} ->
+                content_item = %{"type" => "text", "text" => result_json}
+                response = %{"content" => [content_item]}
+                {:ok, response, state}
+                
+              {:error, encode_error} ->
+                error_msg = "Failed to encode WFC result to JSON: #{inspect(encode_error)}"
+                {:error, error_msg, state}
+            end
+            
+          {:error, reason} ->
+            error_msg = if is_binary(reason), do: reason, else: to_string(reason)
+            {:error, error_msg, state}
+        end
+      rescue
+        e ->
+          error_msg = "WFC run error: #{inspect(e)}"
+          {:error, error_msg, state}
+      catch
+        kind, reason ->
+          error_msg = "WFC run error (#{inspect(kind)}): #{inspect(reason)}"
+          {:error, error_msg, state}
+      end
+    else
+      {:error, "state must be provided", state}
+    end
+  end
+
+  # Convert map back to WFC state from JSON (string keys -> atom keys)
+  # TODO: Add validation to ensure state structure is correct (e.g., grid dimensions match width/height)
+  #       Consider optimization for large states (streaming, lazy evaluation)
+  defp map_to_wfc_state(state_map) when is_map(state_map) do
+    # Convert grid: 2D list of cell states (string keys -> atom keys)
+    grid = case Map.get(state_map, "grid") do
+      nil -> Map.get(state_map, :grid, [])
+      grid_list when is_list(grid_list) ->
+        Enum.map(grid_list, fn row ->
+          Enum.map(row, fn cell_map ->
+            %{
+              possible_tiles: get_value(cell_map, "possible_tiles", :possible_tiles, []),
+              collapsed: get_value(cell_map, "collapsed", :collapsed, false),
+              tile: get_value(cell_map, "tile", :tile, nil)
+            }
+          end)
+        end)
+    end
+    
+    # Convert adjacency_rules: map with direction keys (strings -> atoms)
+    adjacency_rules = case Map.get(state_map, "adjacency_rules") do
+      nil -> Map.get(state_map, :adjacency_rules, %{})
+      rules_map when is_map(rules_map) ->
+        Enum.reduce(rules_map, %{}, fn
+          {direction_str, direction_rules}, acc when is_binary(direction_str) ->
+            direction = case direction_str do
+              "up" -> :up
+              "right" -> :right
+              "down" -> :down
+              "left" -> :left
+              _ -> String.to_existing_atom(direction_str)
+            end
+            # Convert direction rules (pattern_id strings -> integers)
+            converted_rules = Enum.reduce(direction_rules, %{}, fn
+              {pattern_id_str, compatible_list}, dir_acc when is_binary(pattern_id_str) ->
+                pattern_id = String.to_integer(pattern_id_str)
+                compatible = Enum.map(compatible_list, fn
+                  id when is_integer(id) -> id
+                  id_str when is_binary(id_str) -> String.to_integer(id_str)
+                end)
+                Map.put(dir_acc, pattern_id, compatible)
+              {pattern_id, compatible_list}, dir_acc when is_integer(pattern_id) ->
+                compatible = Enum.map(compatible_list, fn
+                  id when is_integer(id) -> id
+                  id_str when is_binary(id_str) -> String.to_integer(id_str)
+                end)
+                Map.put(dir_acc, pattern_id, compatible)
+            end)
+            Map.put(acc, direction, converted_rules)
+          {direction_atom, direction_rules}, acc when is_atom(direction_atom) ->
+            Map.put(acc, direction_atom, direction_rules)
+        end)
+    end
+    
+    # Convert pattern_weights: map with pattern_id keys (strings -> integers)
+    pattern_weights = case Map.get(state_map, "pattern_weights") do
+      nil -> Map.get(state_map, :pattern_weights, %{})
+      weights_map when is_map(weights_map) ->
+        Enum.reduce(weights_map, %{}, fn
+          {pattern_id_str, weight}, acc when is_binary(pattern_id_str) ->
+            pattern_id = String.to_integer(pattern_id_str)
+            Map.put(acc, pattern_id, weight)
+          {pattern_id, weight}, acc when is_integer(pattern_id) ->
+            Map.put(acc, pattern_id, weight)
+        end)
+    end
+    
+    # Build the state map with atom keys
+    %{
+      grid: grid,
+      width: get_value(state_map, "width", :width, 0),
+      height: get_value(state_map, "height", :height, 0),
+      patterns: get_value(state_map, "patterns", :patterns, []),
+      pattern_weights: pattern_weights,
+      adjacency_rules: adjacency_rules,
+      pattern_size: get_value(state_map, "pattern_size", :pattern_size, 3)
+    }
+  end
+  
+  # Helper to get value from map with either string or atom key
+  defp get_value(map, string_key, atom_key, default) do
+    cond do
+      Map.has_key?(map, string_key) -> Map.get(map, string_key)
+      Map.has_key?(map, atom_key) -> Map.get(map, atom_key)
+      true -> default
+    end
+  end
+
   # Recursively convert atom keys to strings for JSON encoding
   defp normalize_for_json(value) when is_map(value) do
     Enum.reduce(value, %{}, fn
@@ -343,7 +721,7 @@ defmodule MiniZincMcp.NativeService do
   # Decode JSON into Elixir terms, then format as plain string (not JSON)
   defp extract_and_format_error_from_string(error_str) when is_binary(error_str) do
     # Try to find JSON error objects in the string using parser (no regex)
-    alias MiniZincMcp.Solver
+    alias PcgMcp.Solver
     
     # First try to parse the entire string as JSON
     case Jason.decode(error_str) do
@@ -378,7 +756,7 @@ defmodule MiniZincMcp.NativeService do
       case Jason.decode(json_str) do
         {:ok, %{"type" => "error"} = error_json} ->
           # Found error JSON, format it as plain string
-          alias MiniZincMcp.Solver
+          alias PcgMcp.Solver
           formatted = Solver.build_error_message(error_json)
           if formatted != "" and formatted != nil, do: formatted, else: acc
         _ ->
