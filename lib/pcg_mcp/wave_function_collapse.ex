@@ -155,8 +155,8 @@ defmodule PcgMcp.WaveFunctionCollapse do
     # Extract patterns from sample
     patterns = extract_patterns(sample, pattern_size)
     
-    # Calculate pattern weights (frequency)
-    pattern_weights = calculate_pattern_weights(patterns)
+    # Calculate pattern weights (frequency) based on actual occurrences in sample
+    pattern_weights = calculate_pattern_weights(patterns, sample, pattern_size)
     
     # Build adjacency rules (which patterns can be neighbors)
     adjacency_rules = build_adjacency_rules(patterns, pattern_size)
@@ -270,15 +270,45 @@ defmodule PcgMcp.WaveFunctionCollapse do
     end
   end
 
-  # Calculate frequency weights for each pattern
-  # TODO: Count actual pattern occurrences in the sample to calculate frequency-based weights
-  #       Currently assumes equal weight for all patterns, which doesn't reflect sample distribution
-  defp calculate_pattern_weights(patterns) do
-    # Count occurrences (for now, assume equal weight)
-    # In a full implementation, we'd count actual occurrences
-    patterns
-    |> Enum.map(fn %{id: id} -> {id, 1.0} end)
+  # Calculate frequency weights for each pattern based on actual occurrences in sample
+  defp calculate_pattern_weights(patterns, sample, pattern_size) do
+    # Count how many times each pattern appears in the sample
+    height = length(sample)
+    width = if height > 0, do: length(hd(sample)), else: 0
+    
+    # Create a map from pattern to its ID for quick lookup
+    pattern_to_id = patterns
+    |> Enum.map(fn %{id: id, pattern: pattern} -> {pattern, id} end)
     |> Map.new()
+    
+    # Count occurrences of each pattern in the sample
+    counts = for y <- 0..(height - pattern_size) do
+      for x <- 0..(width - pattern_size) do
+        pattern = extract_pattern_at(sample, x, y, pattern_size)
+        Map.get(pattern_to_id, pattern)
+      end
+    end
+    |> List.flatten()
+    |> Enum.filter(&(&1 != nil))
+    |> Enum.frequencies()
+    
+    # Convert counts to weights (normalize to avoid very small numbers)
+    total_count = Enum.sum(Map.values(counts))
+    
+    if total_count > 0 do
+      patterns
+      |> Enum.map(fn %{id: id} ->
+        count = Map.get(counts, id, 0)
+        weight = if count > 0, do: count / total_count, else: 0.001
+        {id, weight}
+      end)
+      |> Map.new()
+    else
+      # Fallback: equal weights if no counts
+      patterns
+      |> Enum.map(fn %{id: id} -> {id, 1.0} end)
+      |> Map.new()
+    end
   end
 
   # Build adjacency rules: which patterns can be neighbors in each direction
@@ -299,28 +329,163 @@ defmodule PcgMcp.WaveFunctionCollapse do
     }
   end
 
-  # TODO: Implement proper edge compatibility checking
-  #       Should check if pattern edges match when placed as neighbors in each direction
-  #       Currently returns all patterns, which allows invalid adjacencies
-  defp find_compatible_patterns(patterns, pattern, n) do
-    # Find patterns that can be neighbors
-    # Simplified: return all for now
+  # Find patterns that can be neighbors by checking edge compatibility
+  defp find_compatible_patterns(patterns, pattern, n) when is_list(patterns) and is_map(pattern) do
+    # Extract the edge of the pattern that would touch a neighbor
+    # For now, we'll use a simplified check - patterns with matching edge tiles
+    # In a full implementation, we'd check all edge positions
+    
+    # Ensure pattern.pattern is a valid 2D list
+    pattern_data = if is_map(pattern) and Map.has_key?(pattern, :pattern) do
+      pattern.pattern
+    else
+      []
+    end
+    
+    if is_list(pattern_data) and length(pattern_data) > 0 do
+      # Get the pattern's edge (for simplicity, check bottom edge)
+      pattern_edge = extract_pattern_edge(pattern_data, n, :bottom)
+      
+      # Find patterns whose top edge matches this pattern's bottom edge
+      Enum.filter(patterns, fn candidate ->
+        if is_map(candidate) and Map.has_key?(candidate, :pattern) do
+          candidate_data = candidate.pattern
+          if is_list(candidate_data) and length(candidate_data) > 0 do
+            candidate_edge = extract_pattern_edge(candidate_data, n, :top)
+            edges_match?(pattern_edge, candidate_edge)
+          else
+            false
+          end
+        else
+          false
+        end
+      end)
+      |> Enum.map(& &1.id)
+    else
+      # Fallback: return all patterns if pattern is invalid
+      Enum.map(patterns, & &1.id)
+    end
+  end
+  
+  defp find_compatible_patterns(patterns, _pattern, _n) do
+    # Fallback: return all patterns
     Enum.map(patterns, & &1.id)
   end
+  
+  # Extract an edge from a pattern
+  defp extract_pattern_edge(pattern, n, :top) when is_list(pattern) and n > 0 and length(pattern) > 0 do
+    # Top edge: first row (always a list)
+    case Enum.at(pattern, 0) do
+      row when is_list(row) -> row
+      value -> [value]  # Handle 1x1 patterns
+    end
+  end
+  
+  defp extract_pattern_edge(pattern, n, :bottom) when is_list(pattern) and n > 0 and length(pattern) >= n do
+    # Bottom edge: last row (always a list)
+    case Enum.at(pattern, n - 1) do
+      row when is_list(row) -> row
+      value -> [value]  # Handle 1x1 patterns
+    end
+  end
+  
+  defp extract_pattern_edge(pattern, n, :left) when is_list(pattern) and n > 0 do
+    # Left edge: first column of each row
+    Enum.map(pattern, fn
+      row when is_list(row) and length(row) > 0 -> Enum.at(row, 0)
+      _ -> nil
+    end)
+    |> Enum.filter(&(&1 != nil))
+  end
+  
+  defp extract_pattern_edge(pattern, n, :right) when is_list(pattern) and n > 0 do
+    # Right edge: last column of each row
+    Enum.map(pattern, fn
+      row when is_list(row) and length(row) >= n -> Enum.at(row, n - 1)
+      _ -> nil
+    end)
+    |> Enum.filter(&(&1 != nil))
+  end
+  
+  defp extract_pattern_edge(_pattern, _n, _direction), do: []
+  
+  # Check if two edges match (same values)
+  defp edges_match?(edge1, edge2) when is_list(edge1) and is_list(edge2) do
+    # Ensure both are lists of the same length
+    if length(edge1) == length(edge2) do
+      Enum.zip(edge1, edge2)
+      |> Enum.all?(fn {a, b} -> a == b end)
+    else
+      false
+    end
+  end
+  
+  defp edges_match?(edge1, edge2) when not is_list(edge1) or not is_list(edge2) do
+    # If one is not a list, convert both to lists and compare
+    edge1_list = if is_list(edge1), do: edge1, else: [edge1]
+    edge2_list = if is_list(edge2), do: edge2, else: [edge2]
+    edges_match?(edge1_list, edge2_list)
+  end
+  
+  defp edges_match?(_, _), do: false
 
-  # TODO: Implement proper edge matching for each direction (up, right, down, left)
-  #       Should extract pattern edges and check compatibility when patterns are neighbors
-  #       Currently allows all patterns as neighbors, which doesn't enforce proper constraints
-  defp build_directional_rules(patterns, n, direction) do
-    # Build rules for which patterns can be neighbors in a given direction
-    # This is a simplified version - full implementation would check edge compatibility
+  # Build rules for which patterns can be neighbors in a given direction
+  # Checks edge compatibility: patterns can be neighbors if their touching edges match
+  defp build_directional_rules(patterns, n, direction) when is_list(patterns) and is_atom(direction) do
     rules = for pattern <- patterns do
-      # For now, allow all patterns as neighbors
-      compatible = Enum.map(patterns, & &1.id)
-      {pattern.id, compatible}
+      # Ensure pattern has valid structure
+      pattern_data = if is_map(pattern) and Map.has_key?(pattern, :pattern) do
+        pattern.pattern
+      else
+        []
+      end
+      
+      if is_list(pattern_data) and length(pattern_data) > 0 do
+        # Extract the edge that would touch a neighbor in this direction
+        pattern_edge = extract_pattern_edge(pattern_data, n, direction)
+        
+        # Find patterns whose opposite edge matches
+        compatible = Enum.filter(patterns, fn candidate ->
+          if is_map(candidate) and Map.has_key?(candidate, :pattern) do
+            candidate_data = candidate.pattern
+            if is_list(candidate_data) and length(candidate_data) > 0 do
+              # Get the edge of candidate that would touch pattern
+              opposite_direction = get_opposite_direction(direction)
+              candidate_edge = extract_pattern_edge(candidate_data, n, opposite_direction)
+              edges_match?(pattern_edge, candidate_edge)
+            else
+              false
+            end
+          else
+            false
+          end
+        end)
+        |> Enum.map(& &1.id)
+        
+        {pattern.id, compatible}
+      else
+        # Fallback: allow all patterns if pattern is invalid
+        {pattern.id, Enum.map(patterns, & &1.id)}
+      end
     end
     Map.new(rules)
   end
+  
+  defp build_directional_rules(patterns, _n, _direction) do
+    # Fallback: allow all patterns as neighbors
+    rules = for pattern <- patterns do
+      {pattern.id, Enum.map(patterns, & &1.id)}
+    end
+    Map.new(rules)
+  end
+  
+  # Get the opposite direction for edge matching
+  defp get_opposite_direction(:up), do: :bottom
+  defp get_opposite_direction(:bottom), do: :top
+  defp get_opposite_direction(:left), do: :right
+  defp get_opposite_direction(:right), do: :left
+  defp get_opposite_direction(:top), do: :bottom  # Alias for consistency
+  defp get_opposite_direction(_), do: :bottom  # Fallback
 
   # Use MiniZinc to solve one tick: find cell with lowest entropy and what to collapse it to
   defp solve_tick(state) do
@@ -330,39 +495,9 @@ defmodule PcgMcp.WaveFunctionCollapse do
     if x == nil do
       {:error, "No uncollapsed cells found"}
     else
-      # Use MiniZinc to select which tile to collapse to (weighted by frequency)
-      model = build_tile_selection_model(possible_tiles, state.pattern_weights)
-      
-      # Validate model first using the validation tool
-      case Solver.validate_string(model) do
-        {:ok, %{"valid" => true}} ->
-          # Model is valid, proceed to solve
-          case Solver.solve_string(model) do
-        {:ok, solution} ->
-          # Extract selected tile
-          tile = Map.get(solution, :selected_tile) || Map.get(solution, "selected_tile")
-          
-          if tile != nil and tile in possible_tiles do
-            {:ok, %{cell_x: x, cell_y: y, tile: tile}}
-          else
-            # Fallback: select first possible tile
-            {:ok, %{cell_x: x, cell_y: y, tile: List.first(possible_tiles)}}
-          end
-          
-            {:error, _reason} ->
-              # Fallback: select first possible tile
-              {:ok, %{cell_x: x, cell_y: y, tile: List.first(possible_tiles)}}
-          end
-          
-        {:ok, %{"valid" => false, "errors" => errors}} ->
-          # Model validation failed, use fallback
-          Logger.warning("WFC MiniZinc model validation failed: #{inspect(errors)}")
-          {:ok, %{cell_x: x, cell_y: y, tile: List.first(possible_tiles)}}
-          
-        {:error, _reason} ->
-          # Validation error, use fallback
-          {:ok, %{cell_x: x, cell_y: y, tile: List.first(possible_tiles)}}
-      end
+      # Select tile using weighted random selection based on pattern frequencies
+      tile = select_weighted_tile(possible_tiles, state.pattern_weights)
+      {:ok, %{cell_x: x, cell_y: y, tile: tile}}
     end
   end
 
@@ -419,10 +554,50 @@ defmodule PcgMcp.WaveFunctionCollapse do
     end
   end
 
-  # Build MiniZinc model to select a tile weighted by frequency
-  # TODO: Implement weighted random selection using pattern weights
-  #       Current model uses simple satisfy, should use weighted probability distribution
-  #       Consider implementing weighted selection in Elixir if MiniZinc doesn't support it well
+  # Select a tile using weighted random selection based on pattern frequencies
+  # Tiles with higher weights (more frequent patterns) are more likely to be selected
+  defp select_weighted_tile(possible_tiles, weights) when is_list(possible_tiles) and length(possible_tiles) > 0 do
+    # Calculate weights for possible tiles
+    tile_weights = Enum.map(possible_tiles, fn tile ->
+      weight = Map.get(weights, tile, 1.0)
+      {tile, weight}
+    end)
+    
+    # Calculate total weight
+    total_weight = Enum.reduce(tile_weights, 0.0, fn {_tile, weight}, acc -> acc + weight end)
+    
+    if total_weight > 0.0 do
+      # Generate random number between 0 and total_weight
+      random = :rand.uniform() * total_weight
+      
+      # Select tile based on weighted random
+      select_from_weights(tile_weights, random, 0.0)
+    else
+      # Fallback: equal probability
+      Enum.random(possible_tiles)
+    end
+  end
+  
+  defp select_weighted_tile(possible_tiles, _weights) when is_list(possible_tiles) do
+    List.first(possible_tiles)
+  end
+  
+  # Helper to select tile from weighted list
+  defp select_from_weights([{tile, weight} | rest], random, accumulated) do
+    new_accumulated = accumulated + weight
+    if random <= new_accumulated do
+      tile
+    else
+      select_from_weights(rest, random, new_accumulated)
+    end
+  end
+  
+  defp select_from_weights([], _random, _accumulated) do
+    # Fallback if something goes wrong
+    0
+  end
+  
+  # Build MiniZinc model to select a tile weighted by frequency (deprecated - using Elixir weighted selection instead)
   defp build_tile_selection_model(possible_tiles, weights) do
     num_tiles = length(possible_tiles)
     
