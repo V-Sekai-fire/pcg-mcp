@@ -4,15 +4,20 @@ A Model Context Protocol (MCP) server that provides Wave Function Collapse (WFC)
 
 ## Features
 
-- Wave Function Collapse (WFC) algorithm for procedural level generation
-- Pattern extraction from sample images or arrays
-- Frequency-based pattern weights
-- Edge-compatible adjacency rules
-- Support for image-based samples (when nx_image is available)
-- JSON-RPC 2.0 protocol support via STDIO or HTTP transports
-- Server-Sent Events (SSE) support for streaming responses
-
-Note: MiniZinc is used internally by WFC but is not exposed as a direct tool.
+- **Wave Function Collapse (WFC)** - Procedural level generation algorithm
+  - Pattern extraction from sample images or arrays
+  - Frequency-based pattern weights
+  - Edge-compatible adjacency rules
+  - Support for image-based samples (when nx_image is available)
+- **MiniZinc Constraint Programming** - Advanced constraint solving
+  - Solve MiniZinc models using chuffed solver
+  - Validate MiniZinc models
+  - Automatic standard library inclusion
+- **MCP Protocol Support**
+  - JSON-RPC 2.0 protocol via STDIO or HTTP transports
+  - Server-Sent Events (SSE) support for streaming responses
+- **Command Line Tools**
+  - `mix pcg.generate` - Generate PCG levels from command line
 
 ## Quick Start
 
@@ -65,15 +70,13 @@ PORT=8081 MIX_ENV=prod ./_build/prod/rel/pcg_mcp/bin/pcg_mcp start
 ### Docker
 
 ```bash
-docker build -t minizinc-mcp .
-docker run -d -p 8081:8081 --name minizinc-mcp minizinc-mcp
+docker build -t pcg-mcp .
+docker run -d -p 8081:8081 --name pcg-mcp pcg-mcp
 ```
 
 ## Tools
 
 The server provides the following MCP tools:
-
-### Wave Function Collapse Tools (Primary)
 
 ### MiniZinc Tools (Advanced/Utility)
 
@@ -103,7 +106,44 @@ Validate a MiniZinc model by checking syntax and type checking without solving. 
 - `message` (string): Human-readable message (when valid)
 - `raw_output` (string): Raw MiniZinc validation output (when invalid)
 
-### Wave Function Collapse Tools
+<details>
+<summary><strong>MiniZinc Tool Examples</strong></summary>
+
+**Solve a simple model:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "minizinc_solve",
+    "arguments": {
+      "model_content": "var int: x; constraint x > 0; constraint x < 10; solve satisfy;"
+    }
+  }
+}
+```
+
+**Validate a model:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "minizinc_validate",
+    "arguments": {
+      "model_content": "var int: x; constraint x > 0; solve satisfy;"
+    }
+  }
+}
+```
+
+</details>
+
+### Wave Function Collapse Tools (Primary)
 
 #### `wfc_init`
 
@@ -269,8 +309,22 @@ mix compile
 ### Testing
 
 ```bash
+# Run all tests
 mix test
+
+# Run specific test suites
+mix test test/beam_server_*.exs  # BEAM server integration tests
+mix test test/wfc_test.exs       # WFC unit tests
+mix test test/adhoc_test.exs     # Adhoc tests
 ```
+
+**Test Structure:**
+- `test/beam_server_minizinc_test.exs` - MiniZinc tool tests via BEAM server
+- `test/beam_server_wfc_test.exs` - WFC tool tests via BEAM server
+- `test/beam_server_integration_test.exs` - Full workflow integration tests
+- `test/beam_server_error_test.exs` - Error handling tests
+- `test/wfc_test.exs` - WFC unit tests with fixtures
+- `test/adhoc_test.exs` - Interactive adhoc tests
 
 ### Building Release
 
@@ -289,6 +343,22 @@ For HTTP transport:
 ```bash
 MCP_TRANSPORT=http PORT=8081 mix run --no-halt
 ```
+
+### Generating Levels
+
+Use the Mix task to generate PCG levels:
+
+```bash
+# Default: simple pattern, 30x20
+mix pcg.generate
+
+# Custom pattern and size
+mix pcg.generate simple 25 15
+mix pcg.generate checkerboard 30 20
+mix pcg.generate dungeon 40 25
+```
+
+Available patterns: `simple`, `checkerboard`, `dungeon`
 
 </details>
 
