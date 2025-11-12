@@ -4,24 +4,15 @@ This directory contains sprite assets downloaded from [kenney.nl](https://kenney
 
 ## Assets Included
 
-### 1. Tiny Dungeon
+### Tiny Dungeon
 - **Source**: https://kenney.nl/assets/tiny-dungeon
 - **Tile Size**: 16×16 pixels
 - **Theme**: Dungeon/Roguelike
 - **License**: Creative Commons CC0
 - **Location**: `tiny-dungeon/Tiles/`
-- **Count**: ~130 individual tile PNG files
+- **Count**: 132 individual tile PNG files
 
 Perfect for WFC as each tile is a separate file, making it easy to extract patterns.
-
-### 2. Platformer Art Extended Tileset
-- **Source**: https://kenney.nl/assets/platformer-art-extended-tileset
-- **Theme**: Platformer (multiple themes: Castle, Grass, Dirt, Snow, Choco, Cake, Metal, Purple, Sand, Tundra)
-- **License**: Creative Commons CC0
-- **Location**: `platformer-extended/PNG */` (organized by theme)
-- **Count**: 360+ tiles across multiple themes
-
-Multiple themed tile sets organized in separate folders. Each theme can be used individually or combined for WFC. Tiles are named descriptively (e.g., `grassHalf.png`, `slice01_01.png`).
 
 ## Usage with WFC
 
